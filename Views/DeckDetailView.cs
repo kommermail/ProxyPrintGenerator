@@ -31,6 +31,9 @@ public sealed class DeckDetailView : UserControl
     private readonly OutlinedText _sideboardNote = new() { Size = 19, Wrap = true, Margin = new Thickness(10, 0, 10, 6) };
     private readonly UniformGrid _grid = new() { Columns = 4, Margin = new Thickness(0, 4, 0, 4) };
     private readonly OrnamentCaption _footer = new() { Size = 19.5, Margin = new Thickness(0, 6, 0, 0) };
+    /// The holographic notice above the grid naming every two sided card.
+    private readonly ContentControl _twoSidedBanner = new() { Margin = new Thickness(18, 4, 18, 10), Visibility = Visibility.Collapsed };
+    private readonly Dictionary<Guid, FaceTile> _tiles = [];
     private readonly Button _tryAgain = new() { Content = "Try again", HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 6, 0, 0) };
     private string _lastEntriesSignature = "";
 
@@ -82,6 +85,7 @@ public sealed class DeckDetailView : UserControl
         stack.Children.Add(_sideboardNote);
         stack.Children.Add(edit);
         stack.Children.Add(new SpectacularHeader { Title = "Cards" });
+        stack.Children.Add(_twoSidedBanner);
         var gridHost = new Border { Margin = new Thickness(14, 0, 14, 0), Child = _grid };
         gridHost.SizeChanged += (_, e) => _grid.Columns = Math.Min(6, Math.Max(2, (int)(e.NewSize.Width / 245)));
         stack.Children.Add(gridHost);
@@ -99,6 +103,7 @@ public sealed class DeckDetailView : UserControl
         };
 
         if (deck != null) _job.OutputName = deck.Name.Replace(' ', '-').ToLowerInvariant();
+        _job.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(PrintJobModel.BackToBack) && Deck is { } d) RebuildTwoSidedBanner(d); };
         DeckStore.Shared.Changed += OnStoreChanged;
         Unloaded += (_, _) => { DeckStore.Shared.Changed -= OnStoreChanged; _loadCts?.Cancel(); };
         Loaded += (_, _) => { DeckStore.Shared.Changed -= OnStoreChanged; DeckStore.Shared.Changed += OnStoreChanged; };
@@ -139,7 +144,7 @@ public sealed class DeckDetailView : UserControl
         _sideboardNote.Visibility = deck.SideboardCount > 0 ? Visibility.Visible : Visibility.Collapsed;
         var total = deck.Entries.Count(e => e.Board == "main");
         var loaded = deck.Entries.Count(e => e.Board == "main" && _faces.ContainsKey(e.Id));
-        const string hint = "Click any card to flip it: two sided cards show their real back. Double click to zoom, right click for more.";
+        const string hint = "Click any card to flip it. Two sided cards glow gold and show their real back. Double click to zoom, right click for more.";
         _footer.Text = loaded < total
             ? (_facesSettled ? $"{total - loaded} cards could not be matched to a printing. {hint}" : $"Loading card faces: {loaded} of {total} so far. {hint}")
             : hint;
@@ -151,7 +156,8 @@ public sealed class DeckDetailView : UserControl
     private void RebuildGrid()
     {
         _grid.Children.Clear();
-        if (Deck is not { } deck) return;
+        _tiles.Clear();
+        if (Deck is not { } deck) { _twoSidedBanner.Visibility = Visibility.Collapsed; return; }
         for (var i = 0; i < deck.Entries.Count; i++)
         {
             var entry = deck.Entries[i];
@@ -159,11 +165,76 @@ public sealed class DeckDetailView : UserControl
             _faces.TryGetValue(entry.Id, out var option);
             _grid.Children.Add(BuildTile(i, entry, option));
         }
+        RebuildTwoSidedBanner(deck);
+    }
+
+    /// Big, holographic and impossible to miss: how many two sided cards
+    /// the deck has, each one by name. A name jumps to its card and flips
+    /// it over to show the back.
+    private void RebuildTwoSidedBanner(SavedDeck deck)
+    {
+        var twoSided = deck.Entries.Where(e => e.Board == "main" && _faces.TryGetValue(e.Id, out var f) && f.HasBackFace).ToList();
+        if (twoSided.Count == 0) { _twoSidedBanner.Visibility = Visibility.Collapsed; _twoSidedBanner.Content = null; return; }
+
+        var copies = twoSided.Sum(e => e.Quantity);
+        var content = new StackPanel { Margin = new Thickness(26, 16, 26, 18) };
+        content.Children.Add(new OutlinedText
+        {
+            Text = copies == twoSided.Count
+                ? $"{copies} TWO SIDED CARD{(copies == 1 ? "" : "S")} IN THIS DECK"
+                : $"{copies} TWO SIDED CARDS IN THIS DECK ({twoSided.Count} DIFFERENT)",
+            Size = 32, Readable = true, BlackOutline = true, Wrap = true, TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Stretch,
+        });
+        content.Children.Add(new OutlinedText
+        {
+            Text = "Click a name to jump to it and see its back:", Size = 20, Readable = true, BlackOutline = true, Wrap = true,
+            TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 6, 0, 4),
+        });
+        var names = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Center };
+        foreach (var entry in twoSided)
+        {
+            var label = entry.Quantity > 1 ? $"{entry.Name} ×{entry.Quantity}" : entry.Name;
+            var chip = new Button { Margin = new Thickness(5, 4, 5, 4), Cursor = Cursors.Hand, ToolTip = $"Show {entry.Name} and flip it over" };
+            chip.SetResourceReference(StyleProperty, "PlainButton");
+            chip.Content = new Border
+            {
+                CornerRadius = new CornerRadius(999), Background = Theme.Brush(Colors.Black, 0.55), Padding = new Thickness(14, 4, 14, 5),
+                BorderBrush = Theme.Brush(Theme.Gold), BorderThickness = new Thickness(1.5),
+                Child = new OutlinedText { Text = label, Size = 22, Readable = true, BlackOutline = true },
+            };
+            System.Windows.Automation.AutomationProperties.SetName(chip, $"Show {entry.Name}");
+            chip.Click += (_, _) =>
+            {
+                if (!_tiles.TryGetValue(entry.Id, out var tile)) return;
+                tile.BringIntoView();
+                if (!tile.IsFlipped) tile.Flip();
+                tile.Pulse();
+            };
+            names.Children.Add(chip);
+        }
+        content.Children.Add(names);
+        if (!_job.BackToBack)
+            content.Children.Add(new OutlinedText
+            {
+                Text = "Tip: turn on \"Two sided cards back to back\" below to print each one as a single piece.",
+                Size = 17, Readable = true, BlackOutline = true, Wrap = true, TextAlignment = TextAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 8, 0, 0),
+            });
+
+        var plaque = new Grid
+        {
+            Effect = new System.Windows.Media.Effects.DropShadowEffect { Color = Color.FromRgb(255, 214, 120), BlurRadius = 22, ShadowDepth = 0, Opacity = 0.75 },
+        };
+        plaque.Children.Add(new WashPlaque(26));
+        plaque.Children.Add(content);
+        _twoSidedBanner.Content = plaque;
+        _twoSidedBanner.Visibility = Visibility.Visible;
     }
 
     private FrameworkElement BuildTile(int index, SavedCardLine entry, ScryfallCard? option)
     {
         var tile = new FaceTile(entry, option, _flipped.Contains(entry.Id));
+        _tiles[entry.Id] = tile;
         tile.Flipped += f => { if (f) _flipped.Add(entry.Id); else _flipped.Remove(entry.Id); };
         tile.ZoomRequested += () => CardZoomSheet.Show(_deckId, index, () => _faces.GetValueOrDefault(entry.Id));
 
@@ -300,6 +371,9 @@ public sealed class FaceTile : Grid
     private readonly ScaleTransform _flipScale = new(1, 1);
     private readonly Border _cardHost;
     private bool _flipped;
+    private OutlinedText? _flipLine;
+
+    public bool IsFlipped => _flipped;
 
     public event Action<bool>? Flipped;
     public event Action? ZoomRequested;
@@ -334,7 +408,22 @@ public sealed class FaceTile : Grid
 
         if (entry.IsAltPrinting) Children.Add(Badge("ALT", Color.FromArgb(217, 255, 140, 0), Colors.Black, HorizontalAlignment.Left, VerticalAlignment.Top));
         if (entry.Quantity > 1) Children.Add(Badge($"×{entry.Quantity}", Color.FromArgb(200, 28, 18, 10), Theme.Parchment, HorizontalAlignment.Right, VerticalAlignment.Top));
-        if (option?.HasBackFace == true) Children.Add(Badge("⟲ Tap to flip!", Color.FromArgb(140, 0, 0, 0), Colors.White, HorizontalAlignment.Center, VerticalAlignment.Bottom));
+        if (option?.HasBackFace == true)
+        {
+            // A gold glow marks the card out from across the grid, and the
+            // holographic badge says what it is in letters you can read.
+            _cardHost.Effect = new System.Windows.Media.Effects.DropShadowEffect { Color = Color.FromRgb(255, 210, 90), BlurRadius = 26, ShadowDepth = 0, Opacity = 1 };
+            // A solid gold frame just outside the card's edge.
+            var frameBrush = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 1) };
+            frameBrush.GradientStops.Add(new GradientStop(Color.FromRgb(255, 236, 160), 0));
+            frameBrush.GradientStops.Add(new GradientStop(Theme.Gold, 0.5));
+            frameBrush.GradientStops.Add(new GradientStop(Color.FromRgb(255, 226, 130), 1));
+            var frame = new Border { BorderBrush = frameBrush, BorderThickness = new Thickness(4), Margin = new Thickness(-4), IsHitTestVisible = false };
+            SizeChanged += (_, e) => frame.CornerRadius = new CornerRadius(e.NewSize.Width * 0.05 + 4);
+            Children.Add(frame);
+            Children.Add(TwoSidedBadge());
+            ToolTip = $"{entry.Name}\n{entry.PrintingLabel}\nTwo sided: click to flip it over.";
+        }
 
         SizeChanged += (_, e) => { if (e.WidthChanged) Height = e.NewSize.Width * 88.0 / 63.0; };
         MouseLeftButtonUp += (_, e) => { if (_pendingClick) Flip(); _pendingClick = false; };
@@ -347,6 +436,37 @@ public sealed class FaceTile : Grid
     }
 
     private bool _pendingClick;
+
+    private FrameworkElement TwoSidedBadge()
+    {
+        var text = new StackPanel { Margin = new Thickness(14, 6, 14, 8) };
+        text.Children.Add(new OutlinedText { Text = "TWO SIDED", Size = 24, Readable = true, BlackOutline = true, HorizontalAlignment = HorizontalAlignment.Center });
+        _flipLine = new OutlinedText { Text = FlipLineText, Size = 19, Readable = true, BlackOutline = true, HorizontalAlignment = HorizontalAlignment.Center };
+        text.Children.Add(_flipLine);
+        var badge = new Grid
+        {
+            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(6, 0, 6, 10),
+            IsHitTestVisible = false,
+            Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 8, ShadowDepth = 2, Opacity = 0.6 },
+        };
+        badge.Children.Add(new WashPlaque(18));
+        badge.Children.Add(text);
+        return badge;
+    }
+
+    private string FlipLineText => _flipped ? "click to flip back" : "click to flip";
+
+    /// A quick grow and settle, to show which card a banner name points at.
+    public void Pulse()
+    {
+        var scale = new ScaleTransform(1, 1);
+        RenderTransformOrigin = new Point(0.5, 0.5);
+        RenderTransform = scale;
+        var grow = new DoubleAnimation(1, 1.08, TimeSpan.FromMilliseconds(220)) { AutoReverse = true, RepeatBehavior = new RepeatBehavior(2), EasingFunction = new QuadraticEase() };
+        scale.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
+        scale.BeginAnimation(ScaleTransform.ScaleYProperty, grow);
+        Panel.SetZIndex(this, 10);
+    }
 
     private static Border Badge(string text, Color bg, Color fg, HorizontalAlignment h, VerticalAlignment v) => new()
     {
@@ -370,6 +490,7 @@ public sealed class FaceTile : Grid
     {
         _flipped = !_flipped;
         Flipped?.Invoke(_flipped);
+        if (_flipLine != null) _flipLine.Text = FlipLineText;
         var close = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(170)) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn } };
         close.Completed += async (_, _) =>
         {

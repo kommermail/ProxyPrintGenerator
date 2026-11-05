@@ -96,6 +96,17 @@ public class OutlinedText : FrameworkElement
 
     public string Text { get => (string)GetValue(TextProperty); set => SetValue(TextProperty, value); }
     public double Size { get => (double)GetValue(SizeProperty); set => SetValue(SizeProperty, value); }
+    public static readonly DependencyProperty BlackOutlineProperty = DependencyProperty.Register(nameof(BlackOutline), typeof(bool), typeof(OutlinedText),
+        new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
+    public static readonly DependencyProperty ReadableProperty = DependencyProperty.Register(nameof(Readable), typeof(bool), typeof(OutlinedText),
+        new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsRender));
+
+    /// Gold letters with a solid black outline, for text that has to stand
+    /// out over busy art (the two sided card notices).
+    public bool BlackOutline { get => (bool)GetValue(BlackOutlineProperty); set => SetValue(BlackOutlineProperty, value); }
+    /// Bold Cinzel instead of the ornate Faerie Moot, for notices that must
+    /// be read at a glance.
+    public bool Readable { get => (bool)GetValue(ReadableProperty); set => SetValue(ReadableProperty, value); }
     /// Ink letters with an ivory outline (plaque titles) instead of gold
     /// letters with a leather outline.
     public bool PlaqueStyle { get => (bool)GetValue(PlaqueStyleProperty); set => SetValue(PlaqueStyleProperty, value); }
@@ -103,13 +114,15 @@ public class OutlinedText : FrameworkElement
     public TextAlignment TextAlignment { get => (TextAlignment)GetValue(TextAlignmentProperty); set => SetValue(TextAlignmentProperty, value); }
 
     private static readonly Typeface KingdomFace = new(Theme.Kingdom, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+    private static readonly Typeface ReadableFace = new(Theme.Plaque, FontStyles.Normal, FontWeights.Bold, FontStretches.Normal);
+    private Typeface Face => Readable ? ReadableFace : KingdomFace;
 
     private double Outline => PlaqueStyle ? Math.Max(0.9, Size * 0.04) * 2 : (Size * 0.06 + 0.8) * 2;
     private double Pad => Outline / 2 + 1.5;
 
     private FormattedText Format(double size, double maxWidth)
     {
-        var ft = new FormattedText(Text ?? "", CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, KingdomFace, size,
+        var ft = new FormattedText(Text ?? "", CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, Face, size,
             Brushes.Black, 1.25) { TextAlignment = TextAlignment };
         if (maxWidth is > 0 and < double.PositiveInfinity) ft.MaxTextWidth = maxWidth;
         if (!Wrap) ft.MaxLineCount = 1;
@@ -150,7 +163,7 @@ public class OutlinedText : FrameworkElement
         var width = Math.Max(1, RenderSize.Width - 2 * pad);
         var ft = Format(_fitSize > 0 ? _fitSize : Size, (Wrap || TextAlignment != TextAlignment.Left) ? width : 0);
         var geo = ft.BuildGeometry(new Point(pad, pad));
-        var lineH = new FormattedText("Ag", CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, KingdomFace,
+        var lineH = new FormattedText("Ag", CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, Face,
             _fitSize > 0 ? _fitSize : Size, Brushes.Black, 1.25).Height;
 
         Brush fill, stroke;
@@ -162,7 +175,7 @@ public class OutlinedText : FrameworkElement
         else
         {
             fill = LineGradient(pad, lineH, Color.FromRgb(0xF6, 0xE0, 0xA4), Color.FromRgb(0xD8, 0xB4, 0x6C), Color.FromRgb(0xB2, 0x8A, 0x44));
-            stroke = LineGradient(pad, lineH, Theme.LeatherLight, Theme.Leather, Theme.LeatherDeep);
+            stroke = BlackOutline ? Brushes.Black : LineGradient(pad, lineH, Theme.LeatherLight, Theme.Leather, Theme.LeatherDeep);
         }
         var outline = Outline;
         var shadowPen = new Pen(Theme.Brush(Colors.Black, 0.35), outline) { LineJoin = PenLineJoin.Round };
@@ -307,10 +320,14 @@ public class WashPlaque : Grid
 {
     private static readonly ImageSource Wash = Theme.Image("plaque-wash.jpg");
 
-    public WashPlaque()
+    public WashPlaque() : this(999) { }
+
+    /// A corner radius below 999 makes a rounded panel instead of a capsule,
+    /// for plaques that hold several lines.
+    public WashPlaque(double radius)
     {
         IsHitTestVisible = true;
-        var r = new CornerRadius(999);
+        var r = new CornerRadius(radius);
         Children.Add(new Border { CornerRadius = r, Background = Theme.FoilLinear() });
         Children.Add(new Border { CornerRadius = r, Background = new ImageBrush(Wash) { Stretch = Stretch.UniformToFill } });
         var gloss = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 0.5) };
