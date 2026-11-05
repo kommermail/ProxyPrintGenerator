@@ -59,8 +59,8 @@ public sealed class ImagePipeline(string cacheDirectory, InkCalibration calibrat
         int faceIndex, int scale, CancellationToken ct)
     {
         Directory.CreateDirectory(cacheDirectory);
-        var safeCollector = string.Concat(collector.Select(ch => Path.GetInvalidFileNameChars().Contains(ch) ? '_' : ch));
-        var baseStem = $"{set}_{safeCollector}_f{faceIndex}_x{scale}";
+        static string Safe(string s) => string.Concat(s.Select(ch => Path.GetInvalidFileNameChars().Contains(ch) || ch == '.' ? '_' : ch));
+        var baseStem = $"{Safe(set)}_{Safe(collector)}_f{faceIndex}_x{scale}";
         var destStem = baseStem;
         if (!calibration.IsIdentity) destStem += $"_c{F(calibration.Cyan)}_m{F(calibration.Magenta)}_y{F(calibration.Yellow)}";
         if (vibrance > 0) destStem += $"_v{F(vibrance)}";
@@ -121,8 +121,27 @@ public sealed class ImagePipeline(string cacheDirectory, InkCalibration calibrat
 
     // MARK: - Decoding and border sampling
 
+    /// Scryfall card PNGs are 745 x 1040; nothing real comes close to this.
+    public const int MaxImageSide = 4096;
+
+    /// Reads only the image header and checks the size before anything is
+    /// fully decoded, so an oversized or broken file is turned away early.
+    public static bool HasSafeSize(byte[] data)
+    {
+        try
+        {
+            using var ms = new MemoryStream(data);
+            var dec = BitmapDecoder.Create(ms, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
+            if (dec.Frames.Count < 1) return false;
+            var f = dec.Frames[0];
+            return f.PixelWidth is > 0 and <= MaxImageSide && f.PixelHeight is > 0 and <= MaxImageSide;
+        }
+        catch { return false; }
+    }
+
     private static (int W, int H, byte[] Bgra)? DecodeBgra(byte[] data)
     {
+        if (!HasSafeSize(data)) return null;
         try
         {
             using var ms = new MemoryStream(data);

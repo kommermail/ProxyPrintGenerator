@@ -251,9 +251,21 @@ public static class CardImages
     public static async Task<byte[]?> GetBytesAsync(string url)
     {
         var path = PathFor(url);
-        if (File.Exists(path)) return await File.ReadAllBytesAsync(path);
-        var (data, status) = await ScryfallTransport.GetAsync(url, 3, 2, CancellationToken.None);
-        if (status != HttpStatusCode.OK) return null;
+        if (File.Exists(path))
+        {
+            var cached = await File.ReadAllBytesAsync(path);
+            if (ImagePipeline.HasSafeSize(cached)) return cached;
+            try { File.Delete(path); } catch { }
+        }
+        byte[] data;
+        try
+        {
+            var (bytes, status) = await ScryfallTransport.GetAsync(url, 3, 2, CancellationToken.None);
+            if (status != HttpStatusCode.OK) return null;
+            data = bytes;
+        }
+        catch (UnsafeResponseException) { return null; }
+        if (!ImagePipeline.HasSafeSize(data)) return null;
         Directory.CreateDirectory(Folder);
         await File.WriteAllBytesAsync(path, data);
         return data;

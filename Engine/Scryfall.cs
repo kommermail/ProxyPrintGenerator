@@ -9,6 +9,7 @@
 // Every request carries a browser style User-Agent: the image CDN
 // (cards.scryfall.io) drops connections from custom agents.
 
+using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
@@ -17,7 +18,11 @@ using System.Text.Json.Serialization;
 
 namespace ProxyPrintGenerator.Engine;
 
-public sealed class PpgException(string message) : Exception(message);
+public class PpgException(string message) : Exception(message);
+
+/// A response the app refuses to use (wrong host, not HTTPS, too big).
+/// Never retried.
+public sealed class UnsafeResponseException(string message) : PpgException(message);
 
 /// One exact printing: (set, collector number), set lowercased and any
 /// leading '#' stripped from the number.
@@ -91,8 +96,26 @@ public sealed class ScryfallCard
 }
 
 /// Shared retrying transport. Retries transport failures and 429/5xx.
+/// Every request goes through here, so this is where the app makes sure
+/// it only ever talks to Scryfall over HTTPS and never takes in more
+/// than it can safely hold.
 public static class ScryfallTransport
 {
+    /// Larger than any Scryfall reply or card PNG by a wide margin.
+    public const long MaxResponseBytes = 32L * 1024 * 1024;
+
+    /// Scryfall's API (api.scryfall.com) and image CDN (cards.scryfall.io),
+    /// over HTTPS only.
+    public static bool IsAllowed(Uri? uri)
+    {
+        if (uri is not { IsAbsoluteUri: true } || uri.Scheme != Uri.UriSchemeHttps) return false;
+        var host = uri.IdnHost;
+        foreach (var domain in new[] { "scryfall.com", "scryfall.io" })
+            if (host.Equals(domain, StringComparison.OrdinalIgnoreCase) || host.EndsWith("." + domain, StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
+    }
+
     public const string BrowserUserAgent =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36";
 
@@ -123,22 +146,47 @@ public static class ScryfallTransport
             try
             {
                 using var req = makeRequest();
+                if (!IsAllowed(req.RequestUri))
+                    throw new UnsafeResponseException($"[PPG:BLOCKED-URL] Refused to download from {req.RequestUri}: only Scryfall over HTTPS is allowed.");
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 cts.CancelAfter(TimeSpan.FromSeconds(60));
-                using var resp = await Client.SendAsync(req, cts.Token).ConfigureAwait(false);
+                using var resp = await Client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cts.Token).ConfigureAwait(false);
+                // A redirect must land on Scryfall too.
+                if (!IsAllowed(resp.RequestMessage?.RequestUri))
+                    throw new UnsafeResponseException($"[PPG:BLOCKED-URL] {req.RequestUri} redirected to {resp.RequestMessage?.RequestUri}, which is not Scryfall over HTTPS.");
                 var code = (int)resp.StatusCode;
                 if (code == 429 || code >= 500)
                     last = new PpgException($"HTTP {code} for {req.RequestUri}");
                 else
-                    return (await resp.Content.ReadAsByteArrayAsync(cts.Token).ConfigureAwait(false), resp.StatusCode);
+                    return (await ReadLimitedAsync(resp.Content, req.RequestUri!, cts.Token).ConfigureAwait(false), resp.StatusCode);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (UnsafeResponseException) { throw; }
             catch (Exception e) { last = e; }
             if (attempt < attempts - 1)
                 await Task.Delay(TimeSpan.FromSeconds(baseDelay * (attempt + 1)), ct).ConfigureAwait(false);
         }
         throw last ?? new PpgException("Request failed.");
     }
+
+    /// Reads a body, giving up past MaxResponseBytes (after decompression).
+    private static async Task<byte[]> ReadLimitedAsync(HttpContent content, Uri uri, CancellationToken ct)
+    {
+        if (content.Headers.ContentLength > MaxResponseBytes) throw TooBig(uri);
+        await using var stream = await content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        using var ms = new MemoryStream();
+        var buffer = new byte[81920];
+        int n;
+        while ((n = await stream.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
+        {
+            if (ms.Length + n > MaxResponseBytes) throw TooBig(uri);
+            ms.Write(buffer, 0, n);
+        }
+        return ms.ToArray();
+    }
+
+    private static UnsafeResponseException TooBig(Uri uri)
+        => new($"[PPG:TOO-BIG] The reply from {uri} is over {MaxResponseBytes / (1024 * 1024)} MB, far bigger than any card, so it was not used.");
 
     public static Task<(byte[] Data, HttpStatusCode Status)> GetAsync(string url, int attempts, double baseDelay, CancellationToken ct)
         => SendAsync(() => new HttpRequestMessage(HttpMethod.Get, url), attempts, baseDelay, ct);
