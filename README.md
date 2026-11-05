@@ -67,6 +67,10 @@ ProxyPrintGenerator.exe --build deck.txt out.pdf [1|2|4|6] [pdf|png|jpeg]
 | Image caches | `%LOCALAPPDATA%\ProxyPrintGenerator\` (safe to delete) |
 | Finished builds | `Documents\ProxyPrintGenerator\` |
 
+## Made with AI
+
+ProxyPrintGenerator was made with the help of AI tools: [Claude](https://claude.com) by Anthropic and Muse.
+
 ## Support
 
 ProxyPrintGenerator is free and always will be. I am accepting monetary support at **[ko-fi.com/kommermail](https://ko-fi.com/kommermail)**. Tips never unlock anything; every feature is free for everyone.
