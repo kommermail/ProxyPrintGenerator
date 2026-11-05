@@ -6,6 +6,8 @@
 //   - blue dotted guide at true card size, following the 3 mm corners
 //   - fronts in deck order; two sided backs go in the highest free slot
 //     of the final page, or on a fresh page
+//   - or, back to back: one sided cards first, then front/back page
+//     pairs for duplex printing, each back mirrored behind its front
 
 namespace ProxyPrintGenerator.Engine;
 
@@ -112,6 +114,38 @@ public sealed class LayoutPlan
     public List<string> BackNames { get; } = [];
     public int TotalPlacements { get; private set; }
     public int PageCount => Pages.Count;
+    /// Back to back plans: the 0-based page where the front/back pairs
+    /// begin, or -1 when the plan has none.
+    public int DuplexStartPage { get; private set; } = -1;
+    public int DuplexSheets => DuplexStartPage < 0 ? 0 : (Pages.Count - DuplexStartPage) / 2;
+
+    /// The slot behind a slot when the sheet flips on its long edge: same
+    /// row, column mirrored. The grid is centered, so it lines up.
+    public static int MirroredSlot(int slot)
+        => slot / PageGeometry.GridColumns * PageGeometry.GridColumns + (PageGeometry.GridColumns - 1 - slot % PageGeometry.GridColumns);
+
+    /// One sided cards fill the first pages; then every two sided copy
+    /// gets a front page slot with its back on the next page, mirrored.
+    public static LayoutPlan MakeBackToBack(List<FaceRef> singles, List<(string Name, FaceRef Front, FaceRef Back)> twoSided)
+    {
+        var plan = new LayoutPlan();
+        for (var i = 0; i < singles.Count; i += PageGeometry.CardsPerPage)
+            plan.Pages.Add(singles.Skip(i).Take(PageGeometry.CardsPerPage).ToList());
+        if (twoSided.Count > 0) plan.DuplexStartPage = plan.Pages.Count;
+        for (var i = 0; i < twoSided.Count; i += PageGeometry.CardsPerPage)
+        {
+            var chunk = twoSided.Skip(i).Take(PageGeometry.CardsPerPage).ToList();
+            plan.Pages.Add(chunk.Select(c => c.Front).ToList());
+            plan.Pages.Add([]);
+            var backs = new Dictionary<int, FaceRef>();
+            for (var slot = 0; slot < chunk.Count; slot++) backs[MirroredSlot(slot)] = chunk[slot].Back;
+            plan.BackPlacements[plan.Pages.Count - 1] = backs;
+        }
+        if (plan.Pages.Count == 0) plan.Pages.Add([]);
+        plan.BackNames.AddRange(twoSided.Select(c => c.Name).Distinct());
+        plan.TotalPlacements = singles.Count + twoSided.Count * 2;
+        return plan;
+    }
 
     /// Backs fill the highest free slot of the final page; when it is full
     /// a fresh page starts with its first back in slot 0 (later backs then

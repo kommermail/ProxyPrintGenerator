@@ -23,11 +23,13 @@ Get the latest `ProxyPrintGenerator-…-win-x64.zip` from **[Releases](../../rel
   - Scale: 300, 600, 1200 or 1800 dpi.
   - Cutting guides, regular or thick.
   - Shuffle the deck, with the commander kept first.
+  - Two sided cards back to back: one sided cards come first, then front and back pages that print double sided, so each two sided card is one piece.
   - Shift up, extra gap, max gap, and a Canon safe area.
   - Low-ink calibration, vibrance and midtone lift.
 - **Print sheet**
   - Always prints at actual size, with a page preview.
   - Choose the printer, copies and page range.
+  - Back to back builds print as two jobs: the one sided pages, then the double sided pages, flipped by the printer or by hand.
   - The driver's own quality and paper type lists, plus your printer's full Preferences window.
   - One-click paper presets: Plain, Canon Matte Photo, Photo Paper Plus Glossy II, and Glossy.
   - Warns if your printer can't reach a card edge.

@@ -30,7 +30,7 @@ public sealed class PrintJobModel : Observable
 {
     private string _deckText = "";
     private int _scale = 4;
-    private bool _guides = true, _useCalibration, _maximizeGap, _thickGuides, _shuffle, _pngOverride;
+    private bool _guides = true, _useCalibration, _maximizeGap, _thickGuides, _shuffle, _pngOverride, _backToBack;
     private double _cyan = 1, _magenta = 1, _yellow = 1, _vibrance, _midtone;
     private SafeAreaProfile _safeArea = SafeAreaProfile.None;
     private string _outputName = "proxies";
@@ -58,6 +58,9 @@ public sealed class PrintJobModel : Observable
     public SafeAreaProfile SafeArea { get => _safeArea; set => Set(ref _safeArea, value); }
     public bool MaximizeGap { get => _maximizeGap; set => Set(ref _maximizeGap, value); }
     public bool ShuffleBeforeRender { get => _shuffle; set => Set(ref _shuffle, value); }
+    /// Two sided cards go after the one sided pages as front/back page
+    /// pairs, printed double sided, instead of each back as its own card.
+    public bool BackToBack { get => _backToBack; set => Set(ref _backToBack, value); }
     /// Session only: a fresh launch starts with the override off.
     public bool PngOverride { get => _pngOverride; set => Set(ref _pngOverride, value); }
     public string OutputName { get => _outputName; set => Set(ref _outputName, value); }
@@ -108,7 +111,7 @@ public sealed class PrintJobModel : Observable
     [
         nameof(DeckText), nameof(Scale), nameof(Guides), nameof(ThickGuides), nameof(UseCalibration), nameof(CyanBoost),
         nameof(MagentaBoost), nameof(YellowBoost), nameof(Vibrance), nameof(MidtoneLift), nameof(SafeArea), nameof(MaximizeGap),
-        nameof(ShuffleBeforeRender), nameof(Format), nameof(JpegQuality), nameof(ShiftUpMM), nameof(ExtraGapMM),
+        nameof(ShuffleBeforeRender), nameof(Format), nameof(JpegQuality), nameof(ShiftUpMM), nameof(ExtraGapMM), nameof(BackToBack),
     ];
 
     private string? _staleNote;
@@ -123,7 +126,7 @@ public sealed class PrintJobModel : Observable
 
     private string InputSignature() => string.Join("|", DeckText, Scale, Guides, ThickGuides, UseCalibration, CyanBoost,
         MagentaBoost, YellowBoost, Vibrance, MidtoneLift, SafeArea, MaximizeGap, ShuffleBeforeRender, Format,
-        Format == OutputFormat.Jpeg ? JpegQuality : 0, ShiftUpMM, ExtraGapMM, OutputName.Trim().ToLowerInvariant());
+        Format == OutputFormat.Jpeg ? JpegQuality : 0, ShiftUpMM, ExtraGapMM, BackToBack, OutputName.Trim().ToLowerInvariant());
 
     protected override void OnChanged(string? name)
     {
@@ -286,7 +289,10 @@ public sealed class PrintJobModel : Observable
     public bool HasResult => Result != null && !IsRunning;
     public bool ShowIdle => Result == null && !IsRunning;
     public string StatusLine => ErrorText ?? StageText;
-    public string ResultSummary => Result == null ? "" : $"{Result.FrontCount} card fronts, {Result.PageCount} pages";
+    public string ResultSummary => Result == null ? ""
+        : Result.DuplexSheets > 0
+            ? $"{Result.FrontCount} card fronts, {Result.PageCount} pages: {Result.DuplexStartPage} one sided, then {Result.DuplexSheets} double sided sheet{(Result.DuplexSheets == 1 ? "" : "s")} (pages {Result.DuplexStartPage + 1}–{Result.PageCount})"
+            : $"{Result.FrontCount} card fronts, {Result.PageCount} pages";
     public string ResultBacks => Result is { BackCount: > 0 } r ? $"Two sided backs: {string.Join(", ", r.BackNames)}" : "";
     public string ResultSize => Result == null ? "" : $"Size: {FormatBytes(Result.SizeBytes)}";
     public string ResultWarnings => Result == null ? "" : string.Join("\n", Result.Warnings);
@@ -337,7 +343,7 @@ public sealed class PrintJobModel : Observable
                 Calibration = UseCalibration ? new InkCalibration(CyanBoost, MagentaBoost, YellowBoost) : InkCalibration.None,
                 Vibrance = Vibrance, MidtoneLift = MidtoneLift, PngOverride = PngOverride, ShuffleDeck = ShuffleBeforeRender,
                 SafeArea = SafeArea, MaximizeGap = MaximizeGap, ThickGuides = ThickGuides, Guides = Guides, Format = Format,
-                JpegQuality = JpegQuality, ExtraGapMM = ExtraGapMM, ShiftUpMM = ShiftUpMM,
+                JpegQuality = JpegQuality, ExtraGapMM = ExtraGapMM, ShiftUpMM = ShiftUpMM, BackToBack = BackToBack,
             };
             var progress = new Progress<PrintProgress>(p => { StageText = p.Stage; Fraction = p.Fraction; });
             var text = DeckText;

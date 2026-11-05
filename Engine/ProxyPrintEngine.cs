@@ -14,7 +14,13 @@ public readonly record struct PrintProgress(string Stage, long Done, long Total)
 }
 
 public sealed record PrintJobResult(string OutputPath, int FrontCount, int BackCount, List<string> BackNames,
-    int PageCount, long SizeBytes, List<string> Warnings);
+    int PageCount, long SizeBytes, List<string> Warnings)
+{
+    /// Back to back builds: the 0-based page where the front/back pairs
+    /// for duplex printing begin, or -1 when there are none.
+    public int DuplexStartPage { get; init; } = -1;
+    public int DuplexSheets => DuplexStartPage < 0 ? 0 : (PageCount - DuplexStartPage) / 2;
+}
 
 public sealed class PrintJobOptions
 {
@@ -32,6 +38,9 @@ public sealed class PrintJobOptions
     public double JpegQuality { get; init; } = 0.65;
     public double ExtraGapMM { get; init; }
     public double ShiftUpMM { get; init; }
+    /// Two sided cards print back to back (duplex) after the one sided
+    /// pages, instead of each back as its own card.
+    public bool BackToBack { get; init; }
 }
 
 public static class ProxyPrintEngine
@@ -79,20 +88,23 @@ public static class ProxyPrintEngine
 
         // Flatten into face references: fronts in deck order, backs in order.
         var sources = new Dictionary<FaceRef, FaceSource>();
-        var fronts = new List<FaceRef>();
+        // Each copy keeps its back (if any) beside it, so a shuffle or a
+        // back to back layout can never pair a front with the wrong back.
+        var copies = new List<(string Name, FaceRef Front, FaceRef? Back)>();
         var backs = new List<(string Name, FaceRef Face)>();
         foreach (var (entry, card) in resolved)
         {
             var urls = ScryfallClient.FacePngUrls(card);
             var front = FaceRef.Of(card.Set, card.CollectorNumber, 0);
             sources[front] = new FaceSource(urls[0], card.Set, card.CollectorNumber);
-            fronts.AddRange(Enumerable.Repeat(front, entry.Quantity));
+            FaceRef? back = null;
             if (urls.Count > 1)
             {
-                var back = FaceRef.Of(card.Set, card.CollectorNumber, 1);
-                sources[back] = new FaceSource(urls[1], card.Set, card.CollectorNumber);
-                backs.Add((card.Name, back));
+                back = FaceRef.Of(card.Set, card.CollectorNumber, 1);
+                sources[back.Value] = new FaceSource(urls[1], card.Set, card.CollectorNumber);
+                backs.Add((card.Name, back.Value));
             }
+            copies.AddRange(Enumerable.Repeat((card.Name, front, back), entry.Quantity));
         }
 
         if (o.ShuffleDeck)
@@ -105,10 +117,14 @@ public static class ProxyPrintEngine
                 if (i == 0 || (resolved[i].Card.TypeLine ?? "").Contains("Legendary")) pinCount += resolved[i].Entry.Quantity;
                 else break;
             }
-            var rest = fronts.Skip(pinCount).ToArray();
+            var rest = copies.Skip(pinCount).ToArray();
             Random.Shared.Shuffle(rest);
-            fronts = fronts.Take(pinCount).Concat(rest).ToList();
+            copies = copies.Take(pinCount).Concat(rest).ToList();
         }
+        var fronts = copies.Select(c => c.Front).ToList();
+        // Back to back: every two sided copy needs its own back behind it.
+        var twoSided = copies.Where(c => c.Back != null).Select(c => (c.Name, c.Front, Back: c.Back!.Value)).ToList();
+        if (o.BackToBack) backs = twoSided.Select(c => (c.Name, c.Back)).ToList();
 
         // PNG is a test print format: capped at a dozen cards and two two
         // sided cards. PDF prints the same pixels far faster.
@@ -130,7 +146,9 @@ public static class ProxyPrintEngine
         }
         GC.Collect();
 
-        var plan = LayoutPlan.Make(fronts, backs);
+        var plan = o.BackToBack && twoSided.Count > 0
+            ? LayoutPlan.MakeBackToBack(copies.Where(c => c.Back == null).Select(c => c.Front).ToList(), twoSided)
+            : LayoutPlan.Make(fronts, backs);
         var settings = new PrintSettings
         {
             GapMM = 3.0 + o.ExtraGapMM,
@@ -206,6 +224,6 @@ public static class ProxyPrintEngine
         builder.Dispose();
 
         return new PrintJobResult(outputPath, fronts.Count, backs.Count, plan.BackNames, plan.PageCount,
-            new FileInfo(outputPath).Length, parsed.Warnings);
+            new FileInfo(outputPath).Length, parsed.Warnings) { DuplexStartPage = plan.DuplexStartPage };
     }
 }

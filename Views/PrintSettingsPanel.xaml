@@ -25,6 +25,11 @@
         <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding ShuffleBeforeRender}">
             <c:OutlinedText Text="Shuffle before rendering" Style="{StaticResource RowLabel}"/>
         </CheckBox>
+        <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding BackToBack}">
+            <c:OutlinedText Text="Two sided cards back to back" Style="{StaticResource RowLabel}"/>
+        </CheckBox>
+        <c:OrnamentCaption Size="16" Visibility="{Binding BackToBack, Converter={StaticResource Vis}}"
+                           Text="One sided cards come first. Two sided cards follow as front and back pages that print double sided, so each card is one piece."/>
 
         <DockPanel Margin="0,4">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">

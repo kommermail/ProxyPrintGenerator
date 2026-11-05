@@ -8,7 +8,7 @@ namespace ProxyPrintGenerator;
 public partial class App : Application
 {
     /// Headless harness, like the Swift command line tool:
-    ///   ProxyPrintGenerator.exe --build deck.txt out.pdf [scale] [pdf|png|jpeg]
+    ///   ProxyPrintGenerator.exe --build deck.txt out.pdf [scale] [pdf|png|jpeg] [duplex]
     /// Writes progress and the result to out.log next to the output.
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -27,8 +27,8 @@ public partial class App : Application
                 var progress = new Progress<Engine.PrintProgress>(p => { if (p.Stage != last) { last = p.Stage; log.AppendLine($"{DateTime.Now:HH:mm:ss} {p.Stage}"); } });
                 var sw = System.Diagnostics.Stopwatch.StartNew();
                 var r = await Task.Run(() => Engine.ProxyPrintEngine.RunAsync(text, output,
-                    new Engine.PrintJobOptions { Scale = scale, Format = format, PngOverride = true }, progress, CancellationToken.None));
-                log.AppendLine($"OK {r.FrontCount} fronts, {r.BackCount} backs, {r.PageCount} pages, {r.SizeBytes} bytes in {sw.Elapsed.TotalSeconds:0.0}s");
+                    new Engine.PrintJobOptions { Scale = scale, Format = format, PngOverride = true, BackToBack = e.Args.Contains("duplex") }, progress, CancellationToken.None));
+                log.AppendLine($"OK {r.FrontCount} fronts, {r.BackCount} backs, {r.PageCount} pages (duplex from {r.DuplexStartPage}), {r.SizeBytes} bytes in {sw.Elapsed.TotalSeconds:0.0}s");
                 foreach (var w in r.Warnings) log.AppendLine("warning: " + w);
             }
             catch (Exception ex) { log.AppendLine("FAILED " + ex); code = 1; }

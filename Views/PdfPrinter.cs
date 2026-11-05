@@ -40,15 +40,21 @@ public static class PdfPrinter
         => await PdfDocument.LoadFromFileAsync(await StorageFile.GetFileFromPathAsync(pdfPath));
 
     /// Renders pages [from, to] (1-based) to PNG files in a temp folder.
-    internal static async Task<(DirectoryInfo Folder, List<(string Path, Size Size)> Pages)> StageAsync(
+    internal static Task<(DirectoryInfo Folder, List<(string Path, Size Size)> Pages)> StageAsync(
         PdfDocument doc, int from, int to, int dpi, Action<string> status)
+        => StageAsync(doc, Enumerable.Range(from, to - from + 1).ToList(), dpi, status);
+
+    /// Renders the given pages (1-based, in that order) to PNG files.
+    internal static async Task<(DirectoryInfo Folder, List<(string Path, Size Size)> Pages)> StageAsync(
+        PdfDocument doc, IList<int> pageNumbers, int dpi, Action<string> status)
     {
         var temp = Directory.CreateTempSubdirectory("ProxyPrintSpool-");
         var folder = await StorageFolder.GetFolderFromPathAsync(temp.FullName);
         var pages = new List<(string Path, Size Size)>();
-        for (var i = from; i <= to; i++)
+        for (var n = 0; n < pageNumbers.Count; n++)
         {
-            status($"Preparing page {i - from + 1} of {to - from + 1} for printing…");
+            var i = pageNumbers[n];
+            status($"Preparing page {n + 1} of {pageNumbers.Count} for printing…");
             using var page = doc.GetPage((uint)(i - 1));
             var size = new Size(page.Size.Width, page.Size.Height); // DIPs, 96 per inch
             var file = await folder.CreateFileAsync($"page-{i:000}.png", CreationCollisionOption.ReplaceExisting);
@@ -262,6 +268,20 @@ public static class PrintSheet
         var printButton = SheetParts.Gold("Print", 22);
         var status = new OutlinedText { Size = 18, Wrap = true, TextAlignment = TextAlignment.Center, Margin = new Thickness(0, 8, 0, 0) };
 
+        // Back to back builds: pages from duplexFirst (1-based) on are
+        // front/back pairs. They go out as their own double sided job,
+        // after the one sided pages, either flipped by the printer or by
+        // hand (fronts first, then the stack goes back in for the backs).
+        var duplexFirst = result.DuplexStartPage >= 0 ? result.DuplexStartPage + 1 : 0;
+        var hasDuplex = duplexFirst > 0;
+        const string AutoFlip = "auto", HandFlip = "hand";
+        var flipBox = new ListBox { FontSize = 13.5 };
+        flipBox.SetResourceReference(FrameworkElement.StyleProperty, "Segmented");
+        var flipHint = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 14.5, FontFamily = Theme.Fell, Foreground = Theme.Brush(Theme.Ink, 0.75) };
+        var flipChoice = AutoFlip;
+        var canAutoDuplex = false;
+        List<int>? pendingBacks = null;
+
         // Options grid.
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });
@@ -292,6 +312,14 @@ public static class PrintSheet
         paperStack.HorizontalAlignment = HorizontalAlignment.Stretch;
         Row("Copies", copiesRow);
         Row("Pages", pagesRow);
+        if (hasDuplex)
+        {
+            var flipStack = new StackPanel();
+            flipStack.Children.Add(flipBox);
+            flipStack.Children.Add(flipHint);
+            Row("Two sided", flipStack);
+            flipStack.HorizontalAlignment = HorizontalAlignment.Stretch;
+        }
         Row("Print quality", qualityBox);
         Row("Paper type", mediaBox);
         Row("More", prefs);
@@ -311,7 +339,9 @@ public static class PrintSheet
         var next = SheetParts.Leather("›"); next.Width = 40;
         async Task ShowPreview()
         {
-            pageLabel.Text = $"Page {previewPage + 1} of {count}";
+            pageLabel.Text = $"Page {previewPage + 1} of {count}" + (hasDuplex && previewPage + 1 >= duplexFirst
+                ? $" · sheet {(previewPage + 1 - duplexFirst) / 2 + 1} {((previewPage + 1 - duplexFirst) % 2 == 0 ? "front" : "back")}"
+                : "");
             prev.IsEnabled = previewPage > 0; next.IsEnabled = previewPage < count - 1;
             try { previewImage.Source = await PdfPrinter.PreviewAsync(doc, previewPage, 600); } catch { }
         }
@@ -390,9 +420,30 @@ public static class PrintSheet
                 summary.Text = $"{Pretty(size)}, {ticket.PageOrientation?.ToString().ToLowerInvariant() ?? "portrait"}, actual size (100%). " +
                                $"Pages go out at {dpi} dpi" + (job.ResultDpi > dpi ? $" (the most this printer takes; the PDF holds {job.ResultDpi})." : ".");
                 warning.Text = ReachWarning(job, caps.PageImageableArea);
+                if (hasDuplex)
+                {
+                    canAutoDuplex = caps.DuplexingCapability.Contains(Duplexing.TwoSidedLongEdge);
+                    var choices = new List<Choice>();
+                    if (canAutoDuplex) choices.Add(new Choice(AutoFlip, "Printer flips"));
+                    choices.Add(new Choice(HandFlip, "Flip by hand"));
+                    flipBox.ItemsSource = choices;
+                    if (!canAutoDuplex) flipChoice = HandFlip;
+                    flipBox.SelectedValue = flipChoice;
+                    FlipHint();
+                }
             }
             catch (Exception e) { summary.Text = $"This printer did not report its options ({e.Message}). Printer preferences still works."; warning.Text = ""; }
             finally { refreshing = false; }
+        }
+
+        void FlipHint()
+        {
+            var sheets = result.DuplexSheets;
+            var range = $"pages {duplexFirst}–{count}";
+            flipHint.Text = flipChoice == AutoFlip
+                ? $"The one sided pages print first, then {range} print double sided ({sheets} sheet{(sheets == 1 ? "" : "s")}, flipped on the long edge)."
+                : (canAutoDuplex ? "" : "This printer can't print both sides by itself. ") +
+                  $"The one sided pages print first, then the fronts of {range}. Put that stack back in the tray to print the backs on the other side, then press Print backs.";
         }
 
         static string Pretty(string s) => s.Replace("NorthAmerica", "").Replace("ISO", "");
@@ -421,6 +472,13 @@ public static class PrintSheet
                 if (basis != null && DriverTicket.Current(basis, feature) is { } opt) ticket = DriverTicket.With(queue, ticket, feature, opt);
             Refresh();
         }
+
+        flipBox.SelectionChanged += (_, _) =>
+        {
+            if (refreshing || flipBox.SelectedValue is not string choice) return;
+            flipChoice = choice;
+            FlipHint();
+        };
 
         printerBox.SelectionChanged += (_, _) =>
         {
@@ -464,36 +522,107 @@ public static class PrintSheet
             finally { job.IsPrinting = false; }
         };
 
+        PrintTicket Sided(Duplexing sides)
+        {
+            var t = ticket.Clone();
+            t.Duplexing = sides;
+            return queue.MergeAndValidatePrintTicket(ticket, t).ValidatedPrintTicket;
+        }
+
+        int Dpi() => Math.Clamp(Math.Min(job.ResultDpi, ticket.PageResolution?.X ?? 600), 300, 1200);
+
+        /// Stages and spools one job; returns the pages sent.
+        async Task<int> Send(IList<int> pageNumbers, PrintTicket t, string jobName)
+        {
+            if (pageNumbers.Count == 0) return 0;
+            var staged = await PdfPrinter.StageAsync(doc, pageNumbers, Dpi(), s => status.Text = job.PrintStatus = s);
+            try
+            {
+                status.Text = job.PrintStatus = $"Sending {staged.Pages.Count} pages to {queue.FullName}…";
+                await PdfPrinter.SpoolAsync(queue, t, staged.Pages, jobName);
+                return staged.Pages.Count;
+            }
+            finally { try { staged.Folder.Delete(true); } catch { } }
+        }
+
+        string Sent(int pages, string what) => $"Sent {pages} page{(pages == 1 ? "" : "s")}" + what +
+                                               (copies > 1 ? $" × {copies} copies" : "") + $" to {queue.FullName} at {Dpi()} dpi, actual size.";
+
         printButton.Click += async (_, _) =>
         {
+            ticket.CopyCount = copies;
+            var name = Path.GetFileNameWithoutExtension(result.OutputPath);
+
+            // Second half of a flip by hand: the backs.
+            if (pendingBacks is { } backs)
+            {
+                printButton.IsEnabled = false;
+                job.IsPrinting = true;
+                try
+                {
+                    var n = await Send(backs, Sided(Duplexing.OneSided), name + " (backs)");
+                    job.PrintStatus = Sent(n, " of backs");
+                    pendingBacks = null;
+                    close();
+                }
+                catch (Exception e) { status.Text = job.PrintStatus = $"Printing failed: {e.Message}"; printButton.IsEnabled = true; }
+                finally { job.IsPrinting = false; }
+                return;
+            }
+
             int from = 1, to = count;
             if (somePages.IsChecked == true)
             {
                 if (!int.TryParse(fromBox.Text, out from) || !int.TryParse(toBox.Text, out to) || from < 1 || to > count || from > to)
                 { status.Text = $"Pages must run from 1 to {count}."; return; }
             }
-            ticket.CopyCount = copies;
-            var dpi = Math.Clamp(Math.Min(job.ResultDpi, ticket.PageResolution?.X ?? 600), 300, 1200);
+
+            // Split the range into its one sided part and its front/back pairs.
+            var single = Enumerable.Range(from, to - from + 1).Where(p => !hasDuplex || p < duplexFirst).ToList();
+            var pairs = hasDuplex ? Enumerable.Range(from, to - from + 1).Where(p => p >= duplexFirst).ToList() : [];
+            if (pairs.Count > 0 && ((pairs[0] - duplexFirst) % 2 != 0 || pairs.Count % 2 != 0))
+            {
+                status.Text = $"Pages {duplexFirst}–{count} print in front/back pairs: start on a front ({duplexFirst}, {duplexFirst + 2}, …) and end on a back.";
+                return;
+            }
+
             printButton.IsEnabled = false;
             job.IsPrinting = true;
-            DirectoryInfo? temp = null;
             try
             {
-                var staged = await PdfPrinter.StageAsync(doc, from, to, dpi, s => status.Text = job.PrintStatus = s);
-                temp = staged.Folder;
-                status.Text = job.PrintStatus = $"Sending {staged.Pages.Count} pages to {queue.FullName}…";
-                await PdfPrinter.SpoolAsync(queue, ticket, staged.Pages, Path.GetFileNameWithoutExtension(result.OutputPath));
+                var parts = new List<string>();
+                var sentSingle = await Send(single, hasDuplex ? Sided(Duplexing.OneSided) : ticket, hasDuplex ? name + " (one sided)" : name);
+                if (sentSingle > 0) parts.Add(Sent(sentSingle, hasDuplex ? " one sided" : ""));
+
+                if (pairs.Count > 0 && flipChoice == AutoFlip)
+                {
+                    var both = Sided(Duplexing.TwoSidedLongEdge);
+                    if (both.Duplexing != Duplexing.TwoSidedLongEdge)
+                        throw new InvalidOperationException("this printer turned down double sided printing. Choose Flip by hand and print again.");
+                    var n = await Send(pairs, both, name + " (double sided)");
+                    parts.Add(Sent(n, " double sided"));
+                }
+                else if (pairs.Count > 0)
+                {
+                    var fronts = pairs.Where((_, i) => i % 2 == 0).ToList();
+                    var n = await Send(fronts, Sided(Duplexing.OneSided), name + " (fronts)");
+                    parts.Add(Sent(n, " of fronts"));
+                    pendingBacks = pairs.Where((_, i) => i % 2 == 1).ToList();
+                    PrintMemory.Save(new PrintMemory(queue.FullName, paperBox.SelectedValue as string ?? ""));
+                    job.PrintStatus = string.Join(" ", parts);
+                    status.Text = "Fronts sent. When they finish, put that stack back in the tray so the backs print on the blank side " +
+                                  "(your printer's manual shows which way up), then press Print backs.";
+                    printButton.Content = "Print backs";
+                    printButton.IsEnabled = true;
+                    return;
+                }
+
                 PrintMemory.Save(new PrintMemory(queue.FullName, paperBox.SelectedValue as string ?? ""));
-                job.PrintStatus = $"Sent {staged.Pages.Count} page{(staged.Pages.Count == 1 ? "" : "s")}" +
-                                  (copies > 1 ? $" × {copies} copies" : "") + $" to {queue.FullName} at {dpi} dpi, actual size.";
+                job.PrintStatus = string.Join(" ", parts);
                 close();
             }
             catch (Exception e) { status.Text = job.PrintStatus = $"Printing failed: {e.Message}"; printButton.IsEnabled = true; }
-            finally
-            {
-                job.IsPrinting = false;
-                try { temp?.Delete(true); } catch { }
-            }
+            finally { job.IsPrinting = false; }
         };
 
         LoadQueue();
