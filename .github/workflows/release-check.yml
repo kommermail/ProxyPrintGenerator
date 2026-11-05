@@ -40,7 +40,8 @@ jobs:
         shell: pwsh
         run: |
           $zip = Get-ChildItem dl\*.zip | Select-Object -First 1
-          $want = (gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$env:TAG" --jq ".assets[] | select(.name == \`"$($zip.Name)\`") | .digest") -replace '^sha256:', ''
+          $release = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$env:TAG" | ConvertFrom-Json
+          $want = "$(($release.assets | Where-Object name -eq $zip.Name).digest)" -replace '^sha256:', ''
           $got = (Get-FileHash $zip.FullName -Algorithm SHA256).Hash
           "Uploaded:   $want"
           "Downloaded: $got"
