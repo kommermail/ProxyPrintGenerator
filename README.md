@@ -85,4 +85,4 @@ Card data and images come from [Scryfall](https://scryfall.com) and are fetched 
 **Use it for personal playtesting only.** Don't sell proxies or use them in sanctioned play.
 
 - **Code:** MIT License (see `LICENSE`).
-- **Fonts:** Cinzel, Cinzel Decorative and IM Fell English are under the SIL Open Font License. Other bundled fonts and the artwork keep their own terms.
+- **Fonts:** Cinzel, Cinzel Decorative and IM Fell English are under the SIL Open Font License. Faerie Moot by Font Monkey is freeware. The artwork keeps its own terms.
