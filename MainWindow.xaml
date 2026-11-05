@@ -1,0 +1,33 @@
+<Window x:Class="ProxyPrintGenerator.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:c="clr-namespace:ProxyPrintGenerator.Controls"
+        xmlns:v="clr-namespace:ProxyPrintGenerator.Views"
+        Title="ProxyPrintGenerator" Width="1280" Height="1000" MinWidth="720" MinHeight="640"
+        WindowStartupLocation="CenterScreen" Background="#1C120A"
+        Icon="pack://application:,,,/Assets/Images/icon-256.png"
+        UseLayoutRounding="True" TextOptions.TextFormattingMode="Ideal">
+    <Grid>
+        <c:LeatherBackground/>
+        <Grid Margin="18,14,18,16">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <ListBox x:Name="Tabs" Style="{StaticResource Segmented}" Width="420" HorizontalAlignment="Center" FontSize="17"
+                     Foreground="{StaticResource Parchment}" Margin="0,6,0,0" SelectionChanged="OnTabChanged">
+                <ListBox.Template>
+                    <ControlTemplate TargetType="ListBox">
+                        <Border CornerRadius="999" Background="#CC1C120A" BorderBrush="#88D49E38" BorderThickness="1" Padding="4">
+                            <ItemsPresenter/>
+                        </Border>
+                    </ControlTemplate>
+                </ListBox.Template>
+            </ListBox>
+            <ContentControl x:Name="LibraryHost" Grid.Row="1" Focusable="False"/>
+            <v:QuickBuildView x:Name="QuickBuild" Grid.Row="1" Visibility="Collapsed"/>
+        </Grid>
+        <c:StitchedEdge/>
+        <Grid x:Name="SheetLayer" Visibility="Collapsed"/>
+    </Grid>
+</Window>

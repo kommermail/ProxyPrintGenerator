@@ -1,0 +1,27 @@
+<UserControl x:Class="ProxyPrintGenerator.Views.QuickBuildView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:ProxyPrintGenerator.Controls"
+             xmlns:v="clr-namespace:ProxyPrintGenerator.Views">
+    <c:PanelScaffold>
+        <c:PanelScaffold.Bar>
+            <v:BuildBar x:Name="Bar"/>
+        </c:PanelScaffold.Bar>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,6,0">
+            <StackPanel>
+                <c:AppMasthead Section="Quick Build"/>
+                <StackPanel Margin="22,4,22,18">
+                    <DockPanel Margin="0,0,0,6">
+                        <Button DockPanel.Dock="Right" Style="{StaticResource LeatherButton}" Content="Open a .txt file…" FontSize="16" Click="OnOpenFile"/>
+                        <c:OutlinedText DockPanel.Dock="Right" Text="{Binding DeckLineCount, StringFormat={}{0} lines}" Size="18" Margin="0,0,12,0"
+                                        VerticalAlignment="Center"/>
+                        <c:OutlinedText Text="Deck list" Size="22" VerticalAlignment="Center"/>
+                    </DockPanel>
+                    <TextBox Style="{StaticResource SuedeEditor}" Height="200"
+                             Text="{Binding DeckText, UpdateSourceTrigger=PropertyChanged}"/>
+                    <v:PrintSettingsPanel Margin="0,6,0,0"/>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </c:PanelScaffold>
+</UserControl>

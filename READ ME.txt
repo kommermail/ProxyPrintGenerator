@@ -1,0 +1,30 @@
+ProxyPrintGenerator for Windows
+================================
+
+Print playtest proxies of your decks: paste a deck list, pick printings,
+and get print-ready Letter sheets (3x3 cards at true size, with cutting
+guides), as PDF, PNG or JPEG, or print straight from the app.
+
+RUNNING IT
+- Unzip anywhere and double click ProxyPrintGenerator.exe.
+  Nothing to install; Windows 10 or 11, 64 bit.
+- The first time, Windows SmartScreen may say "Windows protected your PC"
+  because the app isn't code signed. Click "More info", then "Run anyway".
+
+WHERE THINGS GO
+- Finished builds:  Documents\ProxyPrintGenerator\
+- Your decks:       %APPDATA%\ProxyPrintGenerator\decks.json
+- Image caches:     %LOCALAPPDATA%\ProxyPrintGenerator\  (safe to delete)
+
+PRINTING TIPS
+- Print at actual size. The app's own Print button always does this.
+- Most home inkjets print at 600 dpi, so a 600 dpi build ("600") is all
+  they can use; higher scales are for print shops.
+- If the bottom row gets clipped, turn on Safe area or Shift up.
+
+NOT AFFILIATED
+ProxyPrintGenerator is unofficial Fan Content and is not approved or
+endorsed by Wizards of the Coast. Portions of the materials used are
+property of Wizards of the Coast. (c) Wizards of the Coast LLC.
+Card data and images come from Scryfall, which is not affiliated with
+this app. For personal playtesting only. Not for sale or sanctioned play.

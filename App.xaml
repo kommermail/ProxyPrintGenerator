@@ -1,0 +1,15 @@
+<Application x:Class="ProxyPrintGenerator.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:ProxyPrintGenerator"
+             DispatcherUnhandledException="OnUnhandled">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/Theme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+            <local:VisibleWhen x:Key="Vis"/>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

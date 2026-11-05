@@ -1,0 +1,17 @@
+# Build output
+bin/
+obj/
+publish/
+release/
+*.user
+*.suo
+.vs/
+.vscode/
+
+# Packaged builds go on GitHub Releases, not in the repo
+*.zip
+*.exe
+
+# OS clutter
+Thumbs.db
+.DS_Store

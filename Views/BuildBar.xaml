@@ -1,0 +1,92 @@
+<UserControl x:Class="ProxyPrintGenerator.Views.BuildBar"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:ProxyPrintGenerator.Controls"
+             xmlns:v="clr-namespace:ProxyPrintGenerator.Views">
+    <StackPanel>
+        <!-- Compact options (deck page) -->
+        <StackPanel x:Name="OptionsRow" Visibility="Collapsed" Margin="0,0,0,8"
+                    IsEnabled="{Binding CanEditSettings}" Opacity="{Binding SettingsOpacity}">
+            <WrapPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,24,6">
+                    <c:OutlinedText Text="Scale" Size="20" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <ListBox Style="{StaticResource Segmented}" Width="320" Foreground="{StaticResource Parchment}"
+                             ItemsSource="{x:Static v:Choices.Scales}" SelectedValue="{Binding Scale}"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,24,6">
+                    <c:OutlinedText Text="Format" Size="20" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <ListBox Style="{StaticResource Segmented}" Width="280" Foreground="{StaticResource Parchment}"
+                             ItemsSource="{x:Static v:Choices.Formats}" SelectedValue="{Binding Format}"/>
+                </StackPanel>
+                <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding Guides}" Margin="0,0,24,6">
+                    <c:OutlinedText Text="Guides" Size="19" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                </CheckBox>
+                <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding UseCalibration}" Margin="0,0,24,6">
+                    <c:OutlinedText Text="Low ink" Size="19" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                </CheckBox>
+            </WrapPanel>
+            <v:SliderRow Label="JPEG quality" Minimum="0.3" Maximum="0.95" Value="{Binding JpegQuality}" ValueText="{Binding JpegQualityText}"
+                         Visibility="{Binding IsJpeg, Converter={StaticResource Vis}}"/>
+        </StackPanel>
+
+        <!-- File name -->
+        <DockPanel Visibility="{Binding IsRunning, Converter={StaticResource Vis}, ConverterParameter=invert}" Margin="0,0,0,8">
+            <TextBlock Text="FILE NAME" FontFamily="{StaticResource PlaqueFont}" FontWeight="Bold" FontSize="15"
+                       Foreground="{StaticResource Gold}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+            <TextBox Style="{StaticResource FieldBox}" Text="{Binding OutputName, UpdateSourceTrigger=PropertyChanged}" TextAlignment="Center" FontSize="20"/>
+        </DockPanel>
+
+        <!-- Running -->
+        <StackPanel Visibility="{Binding IsRunning, Converter={StaticResource Vis}}">
+            <ProgressBar Value="{Binding Fraction, Mode=OneWay}" Maximum="1" Margin="0,4,0,8"/>
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Style="{StaticResource LeatherButton}" Content="Cancel" Foreground="#FF8A7A" Click="OnCancel"/>
+                <c:OutlinedText Text="{Binding StatusLine}" Size="20" VerticalAlignment="Center"/>
+            </DockPanel>
+        </StackPanel>
+
+        <!-- Finished -->
+        <StackPanel Visibility="{Binding HasResult, Converter={StaticResource Vis}}">
+            <DockPanel LastChildFill="True">
+                <Button DockPanel.Dock="Right" Style="{StaticResource LeatherButton}" FontSize="18" Content="Show in folder" Margin="10,0,0,0" Click="OnReveal"/>
+                <Button DockPanel.Dock="Right" Style="{StaticResource LeatherButton}" FontSize="18" Content="Open" Margin="10,0,0,0" MinWidth="90" Click="OnOpen"/>
+                <UniformGrid Rows="1">
+                    <Button Style="{StaticResource FantasyButton}" FontSize="20" Content="{Binding SaveLabel}" Click="OnSave"/>
+                    <Button Style="{StaticResource FantasyButton}" FontSize="20" Content="Print…" Margin="10,0,0,0"
+                            IsEnabled="{Binding CanPrint}" Visibility="{Binding ShowPrint, Converter={StaticResource Vis}}" Click="OnPrint"/>
+                </UniformGrid>
+            </DockPanel>
+            <c:OutlinedText Text="{Binding PrintStatus}" Size="18" Wrap="True" TextAlignment="Center" Margin="0,6,0,0"
+                            Visibility="{Binding PrintStatus, Converter={StaticResource Vis}}"/>
+            <Button Style="{StaticResource LeatherButton}" Content="Build again" HorizontalAlignment="Center" Margin="0,8,0,0" FontSize="17"
+                    IsEnabled="{Binding CanRun}" Click="OnBuild"/>
+        </StackPanel>
+
+        <!-- Idle -->
+        <Grid Visibility="{Binding ShowIdle, Converter={StaticResource Vis}}" ToolTipService.ShowOnDisabled="True">
+            <Button x:Name="BuildButton" Style="{StaticResource FantasyButton}" FontSize="24" Content="{Binding BuildLabel}"
+                    IsEnabled="{Binding CanBuild}" Click="OnBuild"/>
+            <Path Data="M0,0 L24,24 M24,0 L0,24" Stroke="#E01010" StrokeThickness="6" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                  Width="26" Height="26" Stretch="Uniform" IsHitTestVisible="False"
+                  Visibility="{Binding PngRefused, Converter={StaticResource Vis}}">
+                <Path.Effect><DropShadowEffect BlurRadius="4" ShadowDepth="0" Opacity="0.6"/></Path.Effect>
+            </Path>
+        </Grid>
+
+        <c:OutlinedText Text="{Binding StaleNote}" Size="17" Wrap="True" TextAlignment="Center" Margin="0,6,0,0"
+                        Visibility="{Binding StaleNote, Converter={StaticResource Vis}}"/>
+        <c:OutlinedText Text="{Binding SizeCaption}" Size="17" HorizontalAlignment="Center" Margin="0,6,0,0"
+                        Visibility="{Binding ShowIdle, Converter={StaticResource Vis}}"/>
+        <TextBlock Text="{Binding PngWarning}" Foreground="{StaticResource Warning}" FontSize="16" TextWrapping="Wrap" TextAlignment="Center"
+                   Visibility="{Binding PngWarning, Converter={StaticResource Vis}}"/>
+        <TextBlock Text="{Binding PngLimitNotice}" Foreground="{StaticResource Warning}" FontSize="16" TextWrapping="Wrap" TextAlignment="Center"
+                   Visibility="{Binding PngRefused, Converter={StaticResource Vis}}"/>
+        <c:GuardedOverride IsOn="{Binding PngOverride}" Visibility="{Binding ShowOverride, Converter={StaticResource Vis}}"/>
+        <TextBlock Text="{Binding ErrorText}" Foreground="#FF8A7A" FontSize="15" TextWrapping="Wrap" TextAlignment="Center" Margin="0,6,0,0"
+                   Visibility="{Binding ErrorText, Converter={StaticResource Vis}}"/>
+
+        <Button x:Name="OptionsToggle" Style="{StaticResource PlainButton}" HorizontalAlignment="Center" Margin="0,6,0,0" Visibility="Collapsed" Click="OnToggleOptions">
+            <TextBlock x:Name="OptionsText" Text="▲ Options" Foreground="{StaticResource Gold}" FontSize="17"/>
+        </Button>
+    </StackPanel>
+</UserControl>
