@@ -11,7 +11,7 @@
     <RootNamespace>ProxyPrintGenerator</RootNamespace>
     <AssemblyName>ProxyPrintGenerator</AssemblyName>
     <ApplicationIcon>Assets\Images\app.ico</ApplicationIcon>
-    <Version>1.58.0</Version>
+    <Version>1.59.0</Version>
     <Product>ProxyPrintGenerator</Product>
   </PropertyGroup>
 
