@@ -481,6 +481,7 @@ public class AppMasthead : StackPanel
         art.Children.Add(img);
         art.Children.Add(new Border { CornerRadius = new CornerRadius(16), BorderBrush = Theme.Brush(Colors.Black, 0.3), BorderThickness = new Thickness(1) });
         art.Children.Add(new GlitterOverlay { Seed = 4242 });
+        art.Children.Add(KofiPill(art));
         Children.Add(art);
         var chip = new Border
         {
@@ -494,6 +495,60 @@ public class AppMasthead : StackPanel
             Child = _chip,
         };
         Children.Add(chip);
+    }
+
+    /// A small tooled leather pill for Ko-fi, tucked into the bottom right
+    /// of the masthead's leather frame, under the gold plaque. It scales
+    /// with the artwork so it always sits in the same spot.
+    private static Button KofiPill(FrameworkElement art)
+    {
+        var cup = new System.Windows.Shapes.Path
+        {
+            // A steaming cup with a heart, in a 24 x 24 box.
+            Data = Geometry.Parse("M3,8 H17 V14 A5,5 0 0 1 12,19 H8 A5,5 0 0 1 3,14 Z M17,9.5 H18.5 A2.75,2.75 0 0 1 18.5,15 H17 V13.2 H18.4 A1,1 0 0 0 18.4,11.3 H17 Z " +
+                                  "M10,15.6 C7.6,13.8 6.8,12.9 6.8,11.8 A1.6,1.6 0 0 1 10,11.3 A1.6,1.6 0 0 1 13.2,11.8 C13.2,12.9 12.4,13.8 10,15.6 Z " +
+                                  "M7,2.5 C6,4 8,4.5 7,6.5 M10,2 C9,3.5 11,4 10,6 M13,2.5 C12,4 14,4.5 13,6.5"),
+            Fill = Theme.Brush(Color.FromRgb(0xF6, 0xE0, 0xA4)),
+            Stroke = Theme.Brush(Color.FromRgb(0xF6, 0xE0, 0xA4)), StrokeThickness = 0.9,
+            Width = 22, Height = 22, Stretch = Stretch.Uniform, VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 5, 0),
+        };
+        var label = new TextBlock
+        {
+            Text = "Ko-fi", FontFamily = Theme.Plaque, FontWeight = FontWeights.Bold, FontSize = 17,
+            Foreground = Theme.Brush(Color.FromRgb(0xF6, 0xE0, 0xA4)), VerticalAlignment = VerticalAlignment.Center,
+        };
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        row.Children.Add(cup); row.Children.Add(label);
+        var rim = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1) };
+        rim.GradientStops.Add(new GradientStop(Color.FromRgb(250, 222, 128), 0));
+        rim.GradientStops.Add(new GradientStop(Color.FromRgb(140, 97, 31), 1));
+        var pill = new Border
+        {
+            CornerRadius = new CornerRadius(999), Padding = new Thickness(9, 3, 12, 3), BorderBrush = rim, BorderThickness = new Thickness(1.5),
+            Background = new LinearGradientBrush(Theme.LeatherLight, Theme.LeatherDeep, 90), Child = row,
+            Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 4, ShadowDepth = 1.5, Opacity = 0.6 },
+        };
+        var button = new Button
+        {
+            Content = new Viewbox { Child = pill, Stretch = Stretch.Uniform },
+            HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom,
+            ToolTip = "Enjoying it? Support ProxyPrintGenerator on Ko-fi (ko-fi.com/kommermail)",
+        };
+        button.SetResourceReference(StyleProperty, "PlainButton");
+        System.Windows.Automation.AutomationProperties.SetName(button, "Support on Ko-fi");
+        button.MouseEnter += (_, _) => pill.BorderBrush = Theme.Brush(Color.FromRgb(255, 240, 192));
+        button.MouseLeave += (_, _) => pill.BorderBrush = rim;
+        button.Click += (_, _) => System.Diagnostics.Process.Start(
+            new System.Diagnostics.ProcessStartInfo("https://ko-fi.com/kommermail") { UseShellExecute = true });
+        art.SizeChanged += (_, e) =>
+        {
+            // The leather strip under the plaque runs the bottom ~11% of the art.
+            var w = e.NewSize.Width; var h = e.NewSize.Height;
+            button.Height = Math.Max(16, h * 0.072);
+            button.Margin = new Thickness(0, 0, w * 0.028, h * 0.022);
+        };
+        return button;
     }
 }
 

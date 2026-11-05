@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="https://ko-fi.com/kommermail"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support me on Ko-fi" height="30"></a>
+</p>
+
 # ProxyPrintGenerator
 
 Print playtest proxies of your decks on a home printer. Paste a deck list or open a `.txt` file, choose the printing for each card, and get print-ready Letter sheets. Each sheet holds nine cards at true size, with a border-color bleed and dotted cutting guides. You can save the result as a PDF, PNG or JPEG, or print it straight from the app.
