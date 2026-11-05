@@ -245,7 +245,14 @@ public static class PrintSheet
         printerBox.SelectedItem = queue.FullName;
         var qualityBox = Combo();
         var mediaBox = Combo();
-        qualityBox.DisplayMemberPath = mediaBox.DisplayMemberPath = nameof(DriverOption.Display);
+        var sourceBox = Combo();
+        sourceBox.ToolTip = "Which tray or cassette the paper comes from.";
+        var colorBox = Combo();
+        qualityBox.DisplayMemberPath = mediaBox.DisplayMemberPath = sourceBox.DisplayMemberPath = colorBox.DisplayMemberPath = nameof(DriverOption.Display);
+        // Drivers name the paper source feature one of three ways.
+        string? sourceFeature = null;
+        string? SourceFeature() => new[] { "psk:JobInputBin", "psk:DocumentInputBin", "psk:PageInputBin" }
+            .FirstOrDefault(f => DriverTicket.Options(queue, ticket, f).Count > 0);
         var paperBox = new ListBox { FontSize = 13.5 };
         paperBox.SetResourceReference(FrameworkElement.StyleProperty, "Segmented");
         paperBox.ToolTip = "One click paper setup: the paper type, High quality, Letter, and the printer's top resolution.";
@@ -309,6 +316,7 @@ public static class PrintSheet
         paperStack.Children.Add(paperBox);
         paperStack.Children.Add(paperHint);
         Row("Paper", paperStack);
+        Row("Paper source", sourceBox);
         paperStack.HorizontalAlignment = HorizontalAlignment.Stretch;
         Row("Copies", copiesRow);
         Row("Pages", pagesRow);
@@ -322,6 +330,7 @@ public static class PrintSheet
         }
         Row("Print quality", qualityBox);
         Row("Paper type", mediaBox);
+        Row("Color", colorBox);
         Row("More", prefs);
 
         var options = new StackPanel();
@@ -390,6 +399,12 @@ public static class PrintSheet
             paperBox.ItemsSource = presets.Select(p => new Choice(p.Label, p.Label)).Prepend(new Choice("", "Default")).ToList();
             refreshing = false;
             var again = remembered.Printer == queue.FullName ? presets.FirstOrDefault(p => p.Label == remembered.Paper) : null;
+            sourceFeature = SourceFeature();
+            if (remembered.Printer == queue.FullName && sourceFeature != null && remembered.Source is { Length: > 0 } bin
+                && DriverTicket.Options(queue, ticket, sourceFeature).Any(o => o.Name == bin))
+            {
+                try { ticket = DriverTicket.With(queue, ticket, sourceFeature, bin); } catch { }
+            }
             if (again != null) ApplyPreset(again);
             else Refresh();
         }
@@ -409,6 +424,9 @@ public static class PrintSheet
                 var caps = queue.GetPrintCapabilities(ticket);
                 // The driver's own option lists, with its own names.
                 Fill(qualityBox, DriverTicket.Options(queue, ticket, "psk:PageOutputQuality"), DriverTicket.Current(ticket, "psk:PageOutputQuality"));
+                if (sourceFeature != null) Fill(sourceBox, DriverTicket.Options(queue, ticket, sourceFeature), DriverTicket.Current(ticket, sourceFeature));
+                else Fill(sourceBox, [], null);
+                Fill(colorBox, DriverTicket.Options(queue, ticket, "psk:PageOutputColor"), DriverTicket.Current(ticket, "psk:PageOutputColor"));
                 Fill(mediaBox, DriverTicket.Options(queue, ticket, "psk:PageMediaType"), DriverTicket.Current(ticket, "psk:PageMediaType"));
                 var media = DriverTicket.Current(ticket, "psk:PageMediaType");
                 var match = presets.FirstOrDefault(p => p.MediaOption == media && DriverTicket.Current(ticket, "psk:PageOutputQuality") == p.QualityOption);
@@ -461,7 +479,7 @@ public static class PrintSheet
             var preset = presets.FirstOrDefault(p => p.Label == label);
             if (preset != null) ApplyPreset(preset);
             else { LoadQueueDefaults(); }
-            PrintMemory.Save(new PrintMemory(queue.FullName, label));
+            Remember();
         };
 
         void LoadQueueDefaults()
@@ -486,6 +504,21 @@ public static class PrintSheet
             if (q == null || q == queue) return;
             queue = q;
             LoadQueue();
+        };
+        void Remember() => PrintMemory.Save(new PrintMemory(queue.FullName, paperBox.SelectedValue as string ?? "",
+            sourceFeature != null ? DriverTicket.Current(ticket, sourceFeature) : null));
+        sourceBox.SelectionChanged += (_, _) =>
+        {
+            if (refreshing || sourceFeature == null || sourceBox.SelectedItem is not DriverOption o) return;
+            ticket = DriverTicket.With(queue, ticket, sourceFeature, o.Name);
+            Refresh();
+            Remember();
+        };
+        colorBox.SelectionChanged += (_, _) =>
+        {
+            if (refreshing || colorBox.SelectedItem is not DriverOption o) return;
+            ticket = DriverTicket.With(queue, ticket, "psk:PageOutputColor", o.Name);
+            Refresh();
         };
         qualityBox.SelectionChanged += (_, _) =>
         {
@@ -608,7 +641,7 @@ public static class PrintSheet
                     var n = await Send(fronts, Sided(Duplexing.OneSided), name + " (fronts)");
                     parts.Add(Sent(n, " of fronts"));
                     pendingBacks = pairs.Where((_, i) => i % 2 == 1).ToList();
-                    PrintMemory.Save(new PrintMemory(queue.FullName, paperBox.SelectedValue as string ?? ""));
+                    Remember();
                     job.PrintStatus = string.Join(" ", parts);
                     status.Text = "Fronts sent. When they finish, put that stack back in the tray so the backs print on the blank side " +
                                   "(your printer's manual shows which way up), then press Print backs.";
@@ -617,7 +650,7 @@ public static class PrintSheet
                     return;
                 }
 
-                PrintMemory.Save(new PrintMemory(queue.FullName, paperBox.SelectedValue as string ?? ""));
+                Remember();
                 job.PrintStatus = string.Join(" ", parts);
                 close();
             }

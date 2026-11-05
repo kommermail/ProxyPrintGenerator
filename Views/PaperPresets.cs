@@ -164,7 +164,9 @@ public sealed record PaperPreset(string Label, string MediaOption, string Qualit
 }
 
 /// The printer and paper last used, so the sheet opens ready to go.
-public sealed record PrintMemory(string? Printer, string? Paper)
+/// The last printer, paper preset and paper source (the driver's own
+/// option name, such as a cassette), remembered between prints.
+public sealed record PrintMemory(string? Printer, string? Paper, string? Source = null)
 {
     private static string FilePath => Path.Combine(
         Environment.GetEnvironmentVariable("PPG_DATA_DIR") is { Length: > 0 } custom ? custom
