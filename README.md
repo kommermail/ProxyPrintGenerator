@@ -11,6 +11,8 @@ Print playtest proxies of your decks on a home printer. Paste a deck list or ope
 
 Get the latest `ProxyPrintGenerator-…-win-x64.zip` from **[Releases](../../releases)**, unzip it, and run `ProxyPrintGenerator.exe`. It runs on Windows 10 or 11, 64-bit, and needs nothing installed. The first time you run it, Windows SmartScreen may warn you because the app isn't code-signed. Click **More info → Run anyway**.
 
+**Is it safe?** Yes. That warning appears for almost any new app without a paid code-signing certificate, and it's normal for this one. Every release is tested before it goes out: on the developer's own PC, and on a fresh Windows machine in the cloud, where it's also scanned with Microsoft Defender ([see the checks](../../actions/workflows/release-check.yml)). The app only connects to Scryfall, installs nothing, and collects no personal information. Each release lists a checksum so you can confirm your download is genuine.
+
 ## Features
 
 - **Deck Library**

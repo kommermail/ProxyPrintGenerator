@@ -11,6 +11,23 @@ RUNNING IT
 - The first time, Windows SmartScreen may say "Windows protected your PC"
   because the app isn't code signed. Click "More info", then "Run anyway".
 
+IS IT SAFE? YES.
+That blue "Windows protected your PC" box (it may also say the app
+could harm your computer) shows up for almost any new app that isn't
+code signed. Code signing is a paid certificate that small free apps
+often don't have. The warning is normal and expected for this app.
+It does not mean anything is wrong with it.
+- Every release is tested before it goes out: on the developer's own
+  PC, and on a fresh Windows machine in the cloud, where it is also
+  scanned with Microsoft Defender.
+- The full source code is public, so anyone can see exactly what it
+  does: https://github.com/kommermail/ProxyPrintGenerator
+- The app only connects to Scryfall (for card data and images), over a
+  secure connection. It doesn't install anything, doesn't change any
+  Windows settings, and doesn't collect any personal information.
+- Only download it from the GitHub Releases page. Each release lists a
+  checksum, so you can confirm your copy is the real one.
+
 WHERE THINGS GO
 - Finished builds:  Documents\ProxyPrintGenerator\
 - Your decks:       %APPDATA%\ProxyPrintGenerator\decks.json

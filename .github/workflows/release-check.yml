@@ -1,0 +1,103 @@
+# Release check
+# Tests a published release the way a user gets it, on a fresh Windows
+# machine in GitHub's cloud: download the zip from the Releases page,
+# confirm it is the exact file that was uploaded, scan it with Microsoft
+# Defender, build a test deck with it, and open the app's window.
+#
+# Runs on its own for every published release, or by hand from the
+# Actions tab for any release tag.
+
+name: Release check
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to check (for example v1.59.1)
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - name: Download the release zip
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory dl | Out-Null
+          gh release download $env:TAG -R $env:GITHUB_REPOSITORY -p "*.zip" -D dl
+          Get-ChildItem dl | Format-Table Name, Length
+
+      - name: Confirm the zip is the file that was uploaded
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem dl\*.zip | Select-Object -First 1
+          $want = (gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$env:TAG" --jq ".assets[] | select(.name == \`"$($zip.Name)\`") | .digest") -replace '^sha256:', ''
+          $got = (Get-FileHash $zip.FullName -Algorithm SHA256).Hash
+          "Uploaded:   $want"
+          "Downloaded: $got"
+          if (-not $want -or $got -ne $want.ToUpperInvariant()) { throw "The downloaded zip does not match the uploaded file." }
+          "SHA-256 matches."
+
+      - name: Unzip
+        shell: pwsh
+        run: |
+          Expand-Archive (Get-ChildItem dl\*.zip | Select-Object -First 1).FullName app
+          Get-ChildItem app | Format-Table Name, Length
+          "Version: " + (Get-Item app\ProxyPrintGenerator.exe).VersionInfo.ProductVersion
+
+      - name: Scan with Microsoft Defender
+        shell: pwsh
+        run: |
+          $mp = Join-Path $env:ProgramFiles "Windows Defender\MpCmdRun.exe"
+          if (-not (Test-Path $mp)) { throw "Microsoft Defender is not available on this machine." }
+          & $mp -SignatureUpdate | Out-Host
+          $target = (Resolve-Path app).Path
+          & $mp -Scan -ScanType 3 -File $target -DisableRemediation | Tee-Object -Variable out | Out-Host
+          $code = $LASTEXITCODE
+          if ($code -eq 2) { throw "Microsoft Defender found a threat." }
+          if ($code -ne 0) { throw "Microsoft Defender scan did not finish (exit code $code)." }
+          "Microsoft Defender found no threats."
+
+      - name: Build a test deck with the app
+        shell: pwsh
+        run: |
+          $env:PPG_DATA_DIR = Join-Path $env:RUNNER_TEMP "ppg-data"
+          @(
+            "1 Delver of Secrets"
+            "2 Brutal Cathar"
+            "1 Sol Ring"
+            "4 Island"
+          ) | Set-Content deck.txt
+          $out = Join-Path $PWD "test.pdf"
+          $p = Start-Process app\ProxyPrintGenerator.exe -ArgumentList "--build", "deck.txt", "`"$out`"", "1", "pdf", "duplex" -PassThru -Wait
+          Get-Content "$out.log" | Out-Host
+          if ($p.ExitCode -ne 0) { throw "The test build failed (exit code $($p.ExitCode))." }
+          if (-not ((Get-Content "$out.log" -Raw) -match 'OK 8 fronts, 3 backs, 3 pages \(duplex from 1\)')) { throw "The test build did not produce the expected pages." }
+          "Test deck built: $((Get-Item $out).Length) bytes."
+
+      - name: Open the app window
+        shell: pwsh
+        run: |
+          $env:PPG_DATA_DIR = Join-Path $env:RUNNER_TEMP "ppg-data"
+          $p = Start-Process app\ProxyPrintGenerator.exe -PassThru
+          $deadline = (Get-Date).AddSeconds(60)
+          while ((Get-Date) -lt $deadline -and -not $p.HasExited) { $p.Refresh(); if ($p.MainWindowHandle -ne 0) { break }; Start-Sleep -Milliseconds 500 }
+          $p.Refresh()
+          if ($p.HasExited) { throw "The app closed by itself (exit code $($p.ExitCode))." }
+          if ($p.MainWindowHandle -eq 0) { $p.Kill(); throw "The app's window did not open within 60 seconds." }
+          "Window open: '$($p.MainWindowTitle)', responding: $($p.Responding)"
+          Start-Sleep -Seconds 5
+          $p.Refresh()
+          if ($p.HasExited) { throw "The app closed by itself after opening." }
+          $p.CloseMainWindow() | Out-Null
+          if (-not $p.WaitForExit(10000)) { $p.Kill() }
+          "The app opened and closed cleanly."
