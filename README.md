@@ -6,7 +6,6 @@
 
 Print playtest proxies of your decks on a home printer. Paste a deck list or open a `.txt` file, choose the printing for each card, and get print-ready Letter sheets. Each sheet holds nine cards at true size, with a border-color bleed and dotted cutting guides. You can save the result as a PDF, PNG or JPEG, or print it straight from the app.
 
-The look is embossed forest leather with a fuzzy suede panel, holographic plaques and gold lettering.
 
 ## Download
 
