@@ -32,7 +32,7 @@ public sealed class DeckDetailView : UserControl
     private readonly UniformGrid _grid = new() { Columns = 4, Margin = new Thickness(0, 4, 0, 4) };
     private readonly OrnamentCaption _footer = new() { Size = 19.5, Margin = new Thickness(0, 6, 0, 0) };
     /// The holographic notice above the grid naming every two sided card.
-    private readonly ContentControl _twoSidedBanner = new() { Margin = new Thickness(18, 4, 18, 10), Visibility = Visibility.Collapsed };
+    private readonly ContentControl _twoSidedBanner = new() { Margin = new Thickness(0, 12, 0, 0), Visibility = Visibility.Collapsed };
     private readonly Dictionary<Guid, FaceTile> _tiles = [];
     private readonly Button _tryAgain = new() { Content = "Try again", HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 6, 0, 0) };
     private string _lastEntriesSignature = "";
@@ -55,18 +55,19 @@ public sealed class DeckDetailView : UserControl
             if (t.Length > 0 && Deck != null && t != Deck.Name) DeckStore.Shared.Rename(_deckId, t);
         };
 
-        var edit = new Button { Margin = new Thickness(20, 6, 20, 6) };
-        edit.SetResourceReference(StyleProperty, "PlaqueButton");
-        var editContent = new StackPanel { Orientation = Orientation.Horizontal };
-        editContent.Children.Add(new System.Windows.Shapes.Path
-        {
-            Data = Geometry.Parse("M3,17.25 V21 H6.75 L17.81,9.94 L14.06,6.19 Z M20.71,7.04 C21.1,6.65 21.1,6.02 20.71,5.63 L18.37,3.29 C17.98,2.9 17.35,2.9 16.96,3.29 L15.13,5.12 L18.88,8.87 Z"),
-            Fill = Theme.Brush(Theme.Ink), Width = 22, Height = 22, Stretch = Stretch.Uniform, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 9, 0),
-        });
-        editContent.Children.Add(new OutlinedText { Text = "EDIT THIS DECK", Size = 26, PlaqueStyle = true, VerticalAlignment = VerticalAlignment.Center });
-        edit.Content = editContent;
-        System.Windows.Automation.AutomationProperties.SetName(edit, "Edit this deck");
+        var edit = EditButton();
         edit.Click += (_, _) => DeckEditorSheet.Show(_deckId);
+
+        // One bubble for the deck's tools: the edit button and, when the
+        // deck has any, the two sided cards, on the holographic plaque in
+        // the masthead's tooled leather.
+        var bubbleStack = new StackPanel { Margin = new Thickness(14, 18, 14, 18) };
+        bubbleStack.Children.Add(edit);
+        bubbleStack.Children.Add(_twoSidedBanner);
+        var plaque = new Grid();
+        plaque.Children.Add(new WashPlaque(18));
+        plaque.Children.Add(bubbleStack);
+        var bubble = new TooledLeatherFrame { Child = plaque, Margin = new Thickness(16, 6, 16, 14) };
 
         _tryAgain.SetResourceReference(StyleProperty, "LeatherButton");
         _tryAgain.Click += (_, _) => _ = LoadFacesAsync();
@@ -83,9 +84,7 @@ public sealed class DeckDetailView : UserControl
         stack.Children.Add(back);
         stack.Children.Add(_nameplate);
         stack.Children.Add(_sideboardNote);
-        stack.Children.Add(edit);
-        stack.Children.Add(new SpectacularHeader { Title = "Cards" });
-        stack.Children.Add(_twoSidedBanner);
+        stack.Children.Add(bubble);
         var gridHost = new Border { Margin = new Thickness(14, 0, 14, 0), Child = _grid };
         gridHost.SizeChanged += (_, e) => _grid.Columns = Math.Min(6, Math.Max(2, (int)(e.NewSize.Width / 245)));
         stack.Children.Add(gridHost);
@@ -168,39 +167,73 @@ public sealed class DeckDetailView : UserControl
         RebuildTwoSidedBanner(deck);
     }
 
-    /// Big, holographic and impossible to miss: how many two sided cards
-    /// the deck has, each one by name. A name jumps to its card and flips
-    /// it over to show the back.
+    /// A plain, unmistakable button: a dark leather pill with a gold rim,
+    /// a pencil and gold lettering, that lights up under the pointer.
+    private static Button EditButton()
+    {
+        var gold = Color.FromRgb(0xF6, 0xE0, 0xA4);
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        row.Children.Add(new System.Windows.Shapes.Path
+        {
+            Data = Geometry.Parse("M3,17.25 V21 H6.75 L17.81,9.94 L14.06,6.19 Z M20.71,7.04 C21.1,6.65 21.1,6.02 20.71,5.63 L18.37,3.29 C17.98,2.9 17.35,2.9 16.96,3.29 L15.13,5.12 L18.88,8.87 Z"),
+            Fill = Theme.Brush(gold), Stroke = Brushes.Black, StrokeThickness = 0.8,
+            Width = 24, Height = 24, Stretch = Stretch.Uniform, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0),
+        });
+        row.Children.Add(new OutlinedText { Text = "EDIT THIS DECK", Size = 27, Readable = true, BlackOutline = true, VerticalAlignment = VerticalAlignment.Center });
+
+        var rim = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1) };
+        rim.GradientStops.Add(new GradientStop(Color.FromRgb(250, 222, 128), 0));
+        rim.GradientStops.Add(new GradientStop(Color.FromRgb(140, 97, 31), 1));
+        var restShadow = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 6, ShadowDepth = 2, Opacity = 0.6 };
+        var hoverGlow = new System.Windows.Media.Effects.DropShadowEffect { Color = Color.FromRgb(255, 240, 192), BlurRadius = 20, ShadowDepth = 0, Opacity = 0.95 };
+        var pill = new Border
+        {
+            CornerRadius = new CornerRadius(999), Padding = new Thickness(30, 9, 34, 11), BorderBrush = rim, BorderThickness = new Thickness(2.5),
+            Background = new LinearGradientBrush(Theme.LeatherLight, Theme.LeatherDeep, 90), Child = row, Effect = restShadow,
+        };
+        var button = new Button
+        {
+            Content = pill, HorizontalAlignment = HorizontalAlignment.Center, Cursor = Cursors.Hand,
+            ToolTip = "Add, remove or change the cards in this deck",
+        };
+        button.SetResourceReference(StyleProperty, "PlainButton");
+        System.Windows.Automation.AutomationProperties.SetName(button, "Edit this deck");
+        button.MouseEnter += (_, _) => { pill.BorderBrush = Theme.Brush(Color.FromRgb(255, 240, 192)); pill.Effect = hoverGlow; };
+        button.MouseLeave += (_, _) => { pill.BorderBrush = rim; pill.Effect = restShadow; };
+        button.PreviewMouseLeftButtonDown += (_, _) => pill.Opacity = 0.8;
+        button.PreviewMouseLeftButtonUp += (_, _) => pill.Opacity = 1;
+        return button;
+    }
+
+    /// The two sided part of the bubble: how many, each by name (a name
+    /// jumps to its card and flips it), and how to print them as one piece.
     private void RebuildTwoSidedBanner(SavedDeck deck)
     {
         var twoSided = deck.Entries.Where(e => e.Board == "main" && _faces.TryGetValue(e.Id, out var f) && f.HasBackFace).ToList();
         if (twoSided.Count == 0) { _twoSidedBanner.Visibility = Visibility.Collapsed; _twoSidedBanner.Content = null; return; }
 
         var copies = twoSided.Sum(e => e.Quantity);
-        var content = new StackPanel { Margin = new Thickness(26, 16, 26, 18) };
+        var content = new StackPanel();
+        // A thin gold rule between the edit button and the two sided cards.
+        content.Children.Add(new Border { Height = 2, Margin = new Thickness(40, 0, 40, 10), Background = Theme.Brush(Theme.Gold, 0.85) });
         content.Children.Add(new OutlinedText
         {
             Text = copies == twoSided.Count
                 ? $"{copies} TWO SIDED CARD{(copies == 1 ? "" : "S")} IN THIS DECK"
                 : $"{copies} TWO SIDED CARDS IN THIS DECK ({twoSided.Count} DIFFERENT)",
-            Size = 32, Readable = true, BlackOutline = true, Wrap = true, TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Stretch,
+            Size = 20, Readable = true, BlackOutline = true, Wrap = true, TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Stretch,
         });
-        content.Children.Add(new OutlinedText
-        {
-            Text = "Click a name to jump to it and see its back:", Size = 20, Readable = true, BlackOutline = true, Wrap = true,
-            TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 6, 0, 4),
-        });
-        var names = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Center };
+        var names = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 4, 0, 0) };
         foreach (var entry in twoSided)
         {
             var label = entry.Quantity > 1 ? $"{entry.Name} ×{entry.Quantity}" : entry.Name;
-            var chip = new Button { Margin = new Thickness(5, 4, 5, 4), Cursor = Cursors.Hand, ToolTip = $"Show {entry.Name} and flip it over" };
+            var chip = new Button { Margin = new Thickness(4, 3, 4, 3), Cursor = Cursors.Hand, ToolTip = $"Show {entry.Name} and flip it over" };
             chip.SetResourceReference(StyleProperty, "PlainButton");
             chip.Content = new Border
             {
-                CornerRadius = new CornerRadius(999), Background = Theme.Brush(Colors.Black, 0.55), Padding = new Thickness(14, 4, 14, 5),
-                BorderBrush = Theme.Brush(Theme.Gold), BorderThickness = new Thickness(1.5),
-                Child = new OutlinedText { Text = label, Size = 22, Readable = true, BlackOutline = true },
+                CornerRadius = new CornerRadius(999), Background = Theme.Brush(Colors.Black, 0.55), Padding = new Thickness(10, 2, 10, 3),
+                BorderBrush = Theme.Brush(Theme.Gold), BorderThickness = new Thickness(1.2),
+                Child = new OutlinedText { Text = label, Size = 15, Readable = true, BlackOutline = true },
             };
             System.Windows.Automation.AutomationProperties.SetName(chip, $"Show {entry.Name}");
             chip.Click += (_, _) =>
@@ -216,18 +249,12 @@ public sealed class DeckDetailView : UserControl
         if (!_job.BackToBack)
             content.Children.Add(new OutlinedText
             {
-                Text = "Tip: turn on \"Two sided cards back to back\" below to print each one as a single piece.",
-                Size = 17, Readable = true, BlackOutline = true, Wrap = true, TextAlignment = TextAlignment.Center,
-                HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 8, 0, 0),
+                Text = "Turn on \"Two sided cards back to back\" below to print each one as a single piece.",
+                Size = 16, Readable = true, BlackOutline = true, Wrap = true, TextAlignment = TextAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 6, 0, 0),
             });
 
-        var plaque = new Grid
-        {
-            Effect = new System.Windows.Media.Effects.DropShadowEffect { Color = Color.FromRgb(255, 214, 120), BlurRadius = 22, ShadowDepth = 0, Opacity = 0.75 },
-        };
-        plaque.Children.Add(new WashPlaque(26));
-        plaque.Children.Add(content);
-        _twoSidedBanner.Content = plaque;
+        _twoSidedBanner.Content = content;
         _twoSidedBanner.Visibility = Visibility.Visible;
     }
 

@@ -476,6 +476,42 @@ public class StitchedEdge : FrameworkElement
     }
 }
 
+/// The masthead's tooled red leather, cut from the left edge of its
+/// painting (pure scrollwork, no plaque) and tiled mirror-wise, framing
+/// whatever sits inside it the way the leather frames the logo.
+public class TooledLeatherFrame : Border
+{
+    private static readonly Brush LeatherBrush = MakeLeather();
+
+    private static Brush MakeLeather()
+    {
+        var art = (BitmapSource)Theme.Image("masthead.jpg");
+        // The left 7% of the painting is leather from top to bottom.
+        var stripWidth = (int)(art.PixelWidth * 0.07);
+        var strip = new CroppedBitmap(art, new Int32Rect(0, 0, stripWidth, art.PixelHeight));
+        strip.Freeze();
+        // Drawn at about the scale the masthead shows it.
+        const double scale = 0.6;
+        var brush = new ImageBrush(strip)
+        {
+            TileMode = TileMode.FlipXY, Stretch = Stretch.Fill, ViewportUnits = BrushMappingMode.Absolute,
+            Viewport = new Rect(0, 0, stripWidth * scale, art.PixelHeight * scale),
+        };
+        brush.Freeze();
+        return brush;
+    }
+
+    public TooledLeatherFrame()
+    {
+        CornerRadius = new CornerRadius(22);
+        Background = LeatherBrush;
+        BorderBrush = Theme.Brush(Colors.Black, 0.45);
+        BorderThickness = new Thickness(1.5);
+        Padding = new Thickness(34);
+        Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 16, ShadowDepth = 3, Opacity = 0.45 };
+    }
+}
+
 /// The app masthead: the painted ProxyPrintGenerator plaque with living
 /// glitter, and the section name on a small dark chip beneath it.
 public class AppMasthead : StackPanel
