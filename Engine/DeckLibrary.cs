@@ -68,6 +68,27 @@ public sealed class DeckStore
             if (File.Exists(_file)) Decks = JsonSerializer.Deserialize<List<SavedDeck>>(File.ReadAllText(_file)) ?? [];
         }
         catch { Decks = []; }
+        if (RepairBracketLines()) Persist();
+    }
+
+    /// Lines saved before the parser understood "[TRK] 35" set codes kept
+    /// that text inside the card name ("Shields Up! [TRK] 35"), so the card
+    /// never matched. Re-reads such names with the current parser and
+    /// gives them their printing. Returns true when anything changed.
+    private bool RepairBracketLines()
+    {
+        var changed = false;
+        foreach (var line in Decks.SelectMany(d => d.Entries))
+        {
+            if (line.SetCode != null || !line.Name.Contains('[')) continue;
+            var reread = DeckList.Parse("1 " + line.Name).Entries.FirstOrDefault();
+            if (reread?.SetCode == null || reread.Name.Length == 0) continue;
+            line.Name = reread.Name;
+            line.SetCode = line.OriginalSetCode = reread.SetCode;
+            line.CollectorNumber = line.OriginalCollectorNumber = reread.CollectorNumber;
+            changed = true;
+        }
+        return changed;
     }
 
     private void Persist()

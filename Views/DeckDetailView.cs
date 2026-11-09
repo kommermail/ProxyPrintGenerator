@@ -345,8 +345,11 @@ public sealed class DeckDetailView : UserControl
                 Publish();
             }
 
-            // Pass 2: everything missing, by name, in a few OR searches.
-            var missing = main.Where(e => !loaded.ContainsKey(e.Id)).ToList();
+            // Pass 2: bare names, in a few OR searches. Lines that name a set
+            // ("Flare of Fortitude [SDS]") skip this set-blind batch and go
+            // to the per card lookup below, which asks for that set first,
+            // the same way the print engine does, so preview and print agree.
+            var missing = main.Where(e => !loaded.ContainsKey(e.Id) && e.SetCode == null).ToList();
             if (missing.Count > 0)
             {
                 try

@@ -61,29 +61,45 @@ public static class ProxyPrintEngine
         progress.Report(new("Looking up cards on Scryfall", 0, 1));
         var keys = printable.Where(e => e.HasPrinting).Select(e => new PrintingKey(e.SetCode!, e.CollectorNumber!))
             .Distinct().OrderBy(k => k.Set).ThenBy(k => k.CollectorNumber, StringComparer.Ordinal).ToList();
-        var cards = await ScryfallClient.LookupPrintingsAsync(keys, true, ct).ConfigureAwait(false);
+        // Not strict: a printing Scryfall does not know (a typo, or a
+        // number from another site's numbering) falls back to the card's
+        // name below instead of stopping the whole build.
+        var cards = await ScryfallClient.LookupPrintingsAsync(keys, false, ct).ConfigureAwait(false);
 
         var resolved = new List<(DeckEntry Entry, ScryfallCard Card)>();
         var namedCache = new Dictionary<string, ScryfallCard>();
+
+        // By name: in the line's set when it names one, then in any set.
+        async Task<ScryfallCard> ByName(DeckEntry entry, string why)
+        {
+            var cacheKey = $"{entry.Name}|{entry.SetCode}";
+            if (namedCache.TryGetValue(cacheKey, out var known)) return known;
+            ScryfallCard card;
+            try
+            {
+                card = await ScryfallClient.LookupNamedAsync(entry.Name, entry.SetCode, ct).ConfigureAwait(false);
+            }
+            catch (PpgException) when (entry.SetCode != null)
+            {
+                card = await ScryfallClient.LookupNamedAsync(entry.Name, null, ct).ConfigureAwait(false);
+                why = $"{entry.Name}: not found in set {entry.SetCode.ToUpperInvariant()}";
+            }
+            if (why.Length > 0)
+                parsed.Warnings.Add($"{why}; printed {card.Set.ToUpperInvariant()} {card.CollectorNumber} instead.");
+            namedCache[cacheKey] = card;
+            return card;
+        }
+
         foreach (var entry in printable)
         {
             ct.ThrowIfCancellationRequested();
-            if (entry.HasPrinting)
-            {
-                if (!cards.TryGetValue(new PrintingKey(entry.SetCode!, entry.CollectorNumber!), out var card))
-                    throw new PpgException($"[PPG:CARD-LOOKUP] No card data for ({entry.SetCode}) {entry.CollectorNumber}");
-                resolved.Add((entry, card));
-            }
+            if (entry.HasPrinting && cards.TryGetValue(new PrintingKey(entry.SetCode!, entry.CollectorNumber!), out var exact))
+                resolved.Add((entry, exact));
+            else if (entry.HasPrinting)
+                resolved.Add((entry, await ByName(entry with { CollectorNumber = null },
+                    $"{entry.Name}: Scryfall has no ({entry.SetCode}) {entry.CollectorNumber}").ConfigureAwait(false)));
             else
-            {
-                var cacheKey = $"{entry.Name}|{entry.SetCode}";
-                if (!namedCache.TryGetValue(cacheKey, out var card))
-                {
-                    card = await ScryfallClient.LookupNamedAsync(entry.Name, entry.SetCode, ct).ConfigureAwait(false);
-                    namedCache[cacheKey] = card;
-                }
-                resolved.Add((entry, card));
-            }
+                resolved.Add((entry, await ByName(entry, "").ConfigureAwait(false)));
         }
 
         // Flatten into face references: fronts in deck order, backs in order.

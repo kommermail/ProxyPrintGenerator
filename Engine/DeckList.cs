@@ -8,6 +8,14 @@
 // prefixes, "*F*" foil markers, trailing "[Tag]" brackets, bare names,
 // and "(set)" with no collector number. Lines that cannot be
 // understood are collected as warnings rather than aborting the deck.
+//
+// Set codes in square brackets work too, as several exporters write
+// them: "Shields Up! [TRK] 35", "Talon Gates of Madara [SDS]",
+// "Forest (0316) [TRK] 316" (the "(0316)" is a variant number and is
+// dropped), and the old "[M10] Lightning Bolt" prefix. A bracket only
+// counts as a set code when it is 2 to 6 capitals or digits and the line
+// names no "(set)" already; anything else ("[Ramp]", "[Card Draw]") is a
+// tag and is ignored, as before.
 
 using System.Text.RegularExpressions;
 
@@ -30,6 +38,14 @@ public static partial class DeckList
     [GeneratedRegex(@"^(\d{1,3})\s+(.+)$")] private static partial Regex QtyPlain();
     [GeneratedRegex(@"\(([A-Za-z0-9]+)\)\s+(\S+)$")] private static partial Regex SetAndNumber();
     [GeneratedRegex(@"\(([A-Za-z0-9]+)\)$")] private static partial Regex SetOnly();
+    [GeneratedRegex(@"^(.*\S)\s*\[([A-Za-z0-9]{2,6})\]\s+#?([A-Za-z0-9][^\s\[\]]*)$")] private static partial Regex BracketSetAndNumber();
+    [GeneratedRegex(@"^\[([A-Z0-9]{2,6})\]\s+(.+)$")] private static partial Regex BracketSetPrefix();
+    [GeneratedRegex(@"\s*\(\d+\)$")] private static partial Regex VariantNumber();
+    [GeneratedRegex(@"\((?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]+\)(\s+\S+)?$")] private static partial Regex ParenPrinting();
+
+    /// "TRK", "SDS", "M10", "2X2": capitals and digits with a letter.
+    private static bool LooksLikeSetCode(string s)
+        => s.Length is >= 2 and <= 6 && s.All(c => c is >= 'A' and <= 'Z' or >= '0' and <= '9') && s.Any(char.IsLetter);
 
     public static DeckParseResult Parse(string text)
     {
@@ -63,12 +79,32 @@ public static partial class DeckList
                 line = line.Replace("*F*", "").Trim();
             }
 
-            // Trailing bracketed tags, e.g. "[Ramp]".
+            // Trailing brackets: a set code ("... [SDS]") when the line has
+            // no "(set)" of its own, otherwise a tag ("[Ramp]") to drop.
+            string? bracketSet = null, bracketNumber = null;
             while (line.EndsWith(']'))
             {
                 var open = line.LastIndexOf('[');
                 if (open < 0) break;
-                line = line[..open].Trim();
+                var inner = line[(open + 1)..^1].Trim();
+                var head = line[..open].Trim();
+                line = head;
+                if (LooksLikeSetCode(inner) && !ParenPrinting().IsMatch(head))
+                {
+                    bracketSet = inner;
+                    break;
+                }
+            }
+            // "... [TRK] 35": a bracketed set code with its collector number.
+            if (bracketSet == null)
+            {
+                var bm = BracketSetAndNumber().Match(line);
+                if (bm.Success && !ParenPrinting().IsMatch(bm.Groups[1].Value))
+                {
+                    bracketSet = bm.Groups[2].Value;
+                    bracketNumber = bm.Groups[3].Value;
+                    line = bm.Groups[1].Value.Trim();
+                }
             }
             if (line.Length == 0) continue;
 
@@ -84,10 +120,23 @@ public static partial class DeckList
                 rest = m.Groups[2].Value.Trim();
             }
 
+            // The old "[M10] Lightning Bolt" style: set code first.
+            if (bracketSet == null && BracketSetPrefix().Match(rest) is { Success: true } pre)
+            {
+                bracketSet = pre.Groups[1].Value;
+                rest = pre.Groups[2].Value.Trim();
+            }
+
             var name = rest;
             string? setCode = null, collector = null;
-            var pm = SetAndNumber().Match(rest);
-            if (pm.Success)
+            if (bracketSet != null)
+            {
+                setCode = bracketSet.ToLowerInvariant();
+                collector = bracketNumber;
+                // "Forest (0316)": the bracket style's variant number.
+                name = VariantNumber().Replace(rest, "").Trim();
+            }
+            else if (SetAndNumber().Match(rest) is { Success: true } pm)
             {
                 setCode = pm.Groups[1].Value.ToLowerInvariant();
                 collector = pm.Groups[2].Value;
