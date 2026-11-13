@@ -1,8 +1,9 @@
 // DeckDetailView.cs
 // One deck's page, ported from LibraryView.swift's DeckDetailView: the
 // foil nameplate, the card faces grid (click to flip, double click to
-// zoom, right click for printing / replace / save / remove), the print
-// settings, and the build bar that prints the deck as arranged.
+// zoom, right click for printing / replace / save / remove), copy
+// decklist buttons above and below the grid, the print settings, and the
+// build bar that prints the deck as arranged.
 
 using System.IO;
 using System.Windows;
@@ -12,6 +13,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using ProxyPrintGenerator.Controls;
 using ProxyPrintGenerator.Engine;
@@ -57,12 +59,18 @@ public sealed class DeckDetailView : UserControl
 
         var edit = EditButton();
         edit.Click += (_, _) => DeckEditorSheet.Show(_deckId);
+        edit.Margin = new Thickness(8, 4, 8, 4);
+        var copyTop = CopyDecklistButton();
+        copyTop.Margin = new Thickness(8, 4, 8, 4);
+        var tools = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Center };
+        tools.Children.Add(edit);
+        tools.Children.Add(copyTop);
 
-        // One bubble for the deck's tools: the edit button and, when the
-        // deck has any, the two sided cards, on the holographic plaque in
-        // the masthead's tooled leather.
-        var bubbleStack = new StackPanel { Margin = new Thickness(14, 18, 14, 18) };
-        bubbleStack.Children.Add(edit);
+        // One bubble for the deck's tools: the edit and copy decklist
+        // buttons and, when the deck has any, the two sided cards, on the
+        // holographic plaque in the masthead's tooled leather.
+        var bubbleStack = new StackPanel { Margin = new Thickness(14, 14, 14, 14) };
+        bubbleStack.Children.Add(tools);
         bubbleStack.Children.Add(_twoSidedBanner);
         var plaque = new Grid();
         plaque.Children.Add(new WashPlaque(18));
@@ -90,6 +98,11 @@ public sealed class DeckDetailView : UserControl
         stack.Children.Add(gridHost);
         stack.Children.Add(_footer);
         stack.Children.Add(_tryAgain);
+        // The same copy button again under the cards, so a long deck does
+        // not need scrolling back up.
+        var copyBottom = CopyDecklistButton();
+        copyBottom.Margin = new Thickness(0, 16, 0, 22);
+        stack.Children.Add(copyBottom);
         stack.Children.Add(settings);
         stack.Children.Add(delete);
 
@@ -167,19 +180,65 @@ public sealed class DeckDetailView : UserControl
         RebuildTwoSidedBanner(deck);
     }
 
+    private const string PencilIcon = "M3,17.25 V21 H6.75 L17.81,9.94 L14.06,6.19 Z M20.71,7.04 C21.1,6.65 21.1,6.02 20.71,5.63 L18.37,3.29 C17.98,2.9 17.35,2.9 16.96,3.29 L15.13,5.12 L18.88,8.87 Z";
+    private const string CopyIcon = "M16,1 H4 C2.9,1 2,1.9 2,3 V17 H4 V3 H16 Z M19,5 H8 C6.9,5 6,5.9 6,7 V21 C6,22.1 6.9,23 8,23 H19 C20.1,23 21,22.1 21,21 V7 C21,5.9 20.1,5 19,5 Z M19,21 H8 V7 H19 Z";
+    private const string CheckIcon = "M9,16.17 L4.83,12 L3.41,13.41 L9,19 L21,7 L19.59,5.59 Z";
+
+    private static Button EditButton() => PillButton(PencilIcon, "EDIT THIS DECK", "Add, remove or change the cards in this deck", "Edit this deck", out _, out _);
+
+    /// Copies the whole list, sideboard and all, as "4 Plains (TRK) 361"
+    /// lines, then says so on the button for a moment.
+    private Button CopyDecklistButton()
+    {
+        var button = PillButton(CopyIcon, "COPY DECKLIST",
+            "Copy every card with its printing, like \"1 Plains (TRK) 361\", ready to paste anywhere",
+            "Copy decklist", out var label, out var icon);
+        DispatcherTimer? reset = null;
+        button.Click += (_, _) =>
+        {
+            if (Deck is not { } deck) return;
+            var text = DeckStore.ExportText(deck, _faces);
+            try { Clipboard.SetText(text); }
+            catch (Exception ex)
+            {
+                MessageBox.Show(MainWindow.Instance, $"Could not copy to the clipboard: {ex.Message}", "Copy decklist");
+                return;
+            }
+            // Hold the pill's width so the shorter confirmation does not
+            // make the row jump.
+            if (button.Content is FrameworkElement pill) pill.MinWidth = pill.ActualWidth;
+            var count = deck.Entries.Sum(e => e.Quantity);
+            label.Text = $"COPIED {count} CARD{(count == 1 ? "" : "S")}";
+            icon.Data = Geometry.Parse(CheckIcon);
+            reset?.Stop();
+            var timer = reset = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.5) };
+            timer.Tick += (_, _) =>
+            {
+                timer.Stop();
+                label.Text = "COPY DECKLIST";
+                icon.Data = Geometry.Parse(CopyIcon);
+            };
+            timer.Start();
+        };
+        return button;
+    }
+
     /// A plain, unmistakable button: a dark leather pill with a gold rim,
-    /// a pencil and gold lettering, that lights up under the pointer.
-    private static Button EditButton()
+    /// an icon and gold lettering, that lights up under the pointer.
+    private static Button PillButton(string iconData, string text, string tooltip, string automationName,
+        out OutlinedText label, out System.Windows.Shapes.Path icon)
     {
         var gold = Color.FromRgb(0xF6, 0xE0, 0xA4);
-        var row = new StackPanel { Orientation = Orientation.Horizontal };
-        row.Children.Add(new System.Windows.Shapes.Path
+        var row = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
+        icon = new System.Windows.Shapes.Path
         {
-            Data = Geometry.Parse("M3,17.25 V21 H6.75 L17.81,9.94 L14.06,6.19 Z M20.71,7.04 C21.1,6.65 21.1,6.02 20.71,5.63 L18.37,3.29 C17.98,2.9 17.35,2.9 16.96,3.29 L15.13,5.12 L18.88,8.87 Z"),
+            Data = Geometry.Parse(iconData),
             Fill = Theme.Brush(gold), Stroke = Brushes.Black, StrokeThickness = 0.8,
             Width = 24, Height = 24, Stretch = Stretch.Uniform, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0),
-        });
-        row.Children.Add(new OutlinedText { Text = "EDIT THIS DECK", Size = 27, Readable = true, BlackOutline = true, VerticalAlignment = VerticalAlignment.Center });
+        };
+        row.Children.Add(icon);
+        label = new OutlinedText { Text = text, Size = 27, Readable = true, BlackOutline = true, VerticalAlignment = VerticalAlignment.Center };
+        row.Children.Add(label);
 
         var rim = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1) };
         rim.GradientStops.Add(new GradientStop(Color.FromRgb(250, 222, 128), 0));
@@ -194,10 +253,10 @@ public sealed class DeckDetailView : UserControl
         var button = new Button
         {
             Content = pill, HorizontalAlignment = HorizontalAlignment.Center, Cursor = Cursors.Hand,
-            ToolTip = "Add, remove or change the cards in this deck",
+            ToolTip = tooltip,
         };
         button.SetResourceReference(StyleProperty, "PlainButton");
-        System.Windows.Automation.AutomationProperties.SetName(button, "Edit this deck");
+        System.Windows.Automation.AutomationProperties.SetName(button, automationName);
         button.MouseEnter += (_, _) => { pill.BorderBrush = Theme.Brush(Color.FromRgb(255, 240, 192)); pill.Effect = hoverGlow; };
         button.MouseLeave += (_, _) => { pill.BorderBrush = rim; pill.Effect = restShadow; };
         button.PreviewMouseLeftButtonDown += (_, _) => pill.Opacity = 0.8;

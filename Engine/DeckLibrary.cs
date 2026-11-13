@@ -209,15 +209,30 @@ public sealed class DeckStore
     };
 
     /// The deck as `qty Name (set) number` lines with current printings.
-    public static string DeckText(SavedDeck deck)
+    public static string DeckText(SavedDeck deck) => Compose(deck, e => (e.SetCode, e.CollectorNumber));
+
+    /// The deck list to paste elsewhere: "4 Plains (TRK) 361", set codes in
+    /// capitals. A line with no exact printing of its own takes the one
+    /// Scryfall resolved for it (what the grid shows and the print uses),
+    /// when that has loaded.
+    public static string ExportText(SavedDeck deck, IReadOnlyDictionary<Guid, ScryfallCard> resolved) => Compose(deck, e =>
     {
-        static string Line(SavedCardLine e)
+        var (set, number) = (e.SetCode, e.CollectorNumber);
+        if ((set == null || number == null) && resolved.TryGetValue(e.Id, out var card) && card.Set.Length > 0)
+            (set, number) = (card.Set, card.CollectorNumber.Length > 0 ? card.CollectorNumber : null);
+        return (set?.ToUpperInvariant(), number);
+    });
+
+    private static string Compose(SavedDeck deck, Func<SavedCardLine, (string? Set, string? Number)> printing)
+    {
+        string Line(SavedCardLine e)
         {
             var t = $"{e.Quantity} {e.Name}";
-            if (e.SetCode != null)
+            var (set, number) = printing(e);
+            if (set != null)
             {
-                t += $" ({e.SetCode})";
-                if (e.CollectorNumber != null) t += $" {e.CollectorNumber}";
+                t += $" ({set})";
+                if (number != null) t += $" {number}";
             }
             return t;
         }
