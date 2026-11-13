@@ -8,6 +8,117 @@
             <Setter Property="Size" Value="21"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
+        <!-- Round color swatches with a gold ring on the chosen one -->
+        <Style x:Key="Swatches" TargetType="ListBox">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+            <Setter Property="ItemsPanel">
+                <Setter.Value><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></Setter.Value>
+            </Setter>
+            <Setter Property="Template">
+                <Setter.Value><ControlTemplate TargetType="ListBox"><ItemsPresenter/></ControlTemplate></Setter.Value>
+            </Setter>
+            <Setter Property="ItemContainerStyle">
+                <Setter.Value>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Cursor" Value="Hand"/>
+                        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                        <Setter Property="ToolTip" Value="{Binding Name}"/>
+                        <Setter Property="AutomationProperties.Name" Value="{Binding Name}"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <Grid Width="36" Height="36" Margin="1" Background="Transparent">
+                                        <Ellipse x:Name="ring" Stroke="Transparent" StrokeThickness="3"/>
+                                        <Ellipse Margin="6" Fill="{Binding Brush}" Stroke="#80000000" StrokeThickness="1"/>
+                                    </Grid>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ring" Property="Stroke" Value="#88D49E38"/></Trigger>
+                                        <Trigger Property="IsSelected" Value="True"><Setter TargetName="ring" Property="Stroke" Value="{StaticResource Gold}"/></Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- The label's fonts, each showing PROXY in itself -->
+        <Style x:Key="FontPicker" TargetType="ListBox">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+            <Setter Property="ItemsPanel">
+                <Setter.Value><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></Setter.Value>
+            </Setter>
+            <Setter Property="Template">
+                <Setter.Value><ControlTemplate TargetType="ListBox"><ItemsPresenter/></ControlTemplate></Setter.Value>
+            </Setter>
+            <Setter Property="ItemContainerStyle">
+                <Setter.Value>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Cursor" Value="Hand"/>
+                        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                        <Setter Property="ToolTip" Value="{Binding Name}"/>
+                        <Setter Property="AutomationProperties.Name" Value="{Binding Name}"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <Border x:Name="chip" CornerRadius="8" Margin="0,0,6,6" Padding="10,2,10,4" MinWidth="96"
+                                            Background="#40FFF8E8" BorderBrush="#66331F12" BorderThickness="1">
+                                        <TextBlock Text="PROXY" FontFamily="{Binding Family}" FontWeight="{Binding Weight}" FontStyle="{Binding Style}"
+                                                   FontSize="21" Foreground="{StaticResource Ink}" HorizontalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="chip" Property="Background" Value="#90FFF8E8"/></Trigger>
+                                        <Trigger Property="IsSelected" Value="True"><Setter TargetName="chip" Property="Background" Value="{StaticResource GoldButtonFill}"/></Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- Nine spots over a little art box: where the label or logo sits -->
+        <Style x:Key="SpotPicker" TargetType="ListBox">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="ItemsPanel">
+                <Setter.Value><ItemsPanelTemplate><UniformGrid Columns="3" Rows="3"/></ItemsPanelTemplate></Setter.Value>
+            </Setter>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBox">
+                        <Border Width="150" Height="108" CornerRadius="8" Padding="5" Background="#3A10281E" BorderBrush="#66331F12" BorderThickness="1">
+                            <ItemsPresenter/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="ItemContainerStyle">
+                <Setter.Value>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Cursor" Value="Hand"/>
+                        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                        <Setter Property="ToolTip" Value="{Binding Label}"/>
+                        <Setter Property="AutomationProperties.Name" Value="{Binding Label}"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <Border x:Name="spot" CornerRadius="5" Margin="3" Background="#55FFF8E8" BorderBrush="#66331F12" BorderThickness="1"/>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="spot" Property="Background" Value="#AAFFF8E8"/></Trigger>
+                                        <Trigger Property="IsSelected" Value="True"><Setter TargetName="spot" Property="Background" Value="{StaticResource GoldButtonFill}"/></Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
     <StackPanel IsEnabled="{Binding CanEditSettings}" Opacity="{Binding SettingsOpacity}">
         <!-- Quality -->
@@ -63,8 +174,54 @@
         <v:SliderRow Label="Vibrance" Minimum="0" Maximum="0.6" Value="{Binding Vibrance}" ValueText="{Binding VibranceText}"/>
         <v:SliderRow Label="Midtone lift" Minimum="0" Maximum="0.35" Value="{Binding MidtoneLift}" ValueText="{Binding MidtoneText}"/>
 
+        <!-- Proxy mark: a PROXY label, a colored border, or the logo -->
+        <Expander Style="{StaticResource FoldOut}" Margin="0,14,0,4" AutomationProperties.Name="Proxy mark">
+            <Expander.Header>
+                <DockPanel>
+                    <c:OutlinedText DockPanel.Dock="Left" Text="Proxy mark" Style="{StaticResource RowLabel}"/>
+                    <c:OutlinedText Text="{Binding MarkSummary}" Size="16" VerticalAlignment="Center" TextAlignment="Right"
+                                    HorizontalAlignment="Right" Margin="14,0,0,0"/>
+                </DockPanel>
+            </Expander.Header>
+            <DockPanel>
+                <v:ProxyMarkPreview DockPanel.Dock="Right" Width="150" Height="209.5" Margin="16,4,0,4" VerticalAlignment="Top"
+                                    Mark="{Binding Mark}" ToolTip="How the mark sits on a card"/>
+                <StackPanel>
+                    <c:OrnamentCaption Size="16" Margin="0,2,0,4" Text="Mark every card as a proxy, so nobody mistakes it for the real thing."/>
+                    <ListBox Style="{StaticResource Segmented}" FontSize="14" Margin="0,4,0,8" AutomationProperties.Name="Proxy mark kind"
+                             ItemsSource="{x:Static v:Choices.MarkKinds}" SelectedValue="{Binding MarkKind}"/>
+                    <DockPanel Margin="0,2" Visibility="{Binding ShowMarkColor, Converter={StaticResource Vis}}">
+                        <c:OutlinedText Text="Color" Style="{StaticResource RowLabel}" Width="96"/>
+                        <ListBox Style="{StaticResource Swatches}" AutomationProperties.Name="Proxy mark color"
+                                 ItemsSource="{x:Static v:Choices.MarkColors}" SelectedValuePath="Hex" SelectedValue="{Binding MarkColor}"/>
+                    </DockPanel>
+                    <DockPanel Margin="0,6,0,2" Visibility="{Binding ShowMarkFont, Converter={StaticResource Vis}}">
+                        <c:OutlinedText Text="Font" Style="{StaticResource RowLabel}" Width="96" VerticalAlignment="Top" Margin="0,4,0,0"/>
+                        <ListBox Style="{StaticResource FontPicker}" AutomationProperties.Name="Proxy label font"
+                                 ItemsSource="{x:Static v:Choices.MarkFonts}" SelectedValuePath="Value" SelectedValue="{Binding MarkFont}"/>
+                    </DockPanel>
+                    <DockPanel Margin="0,6,0,2" Visibility="{Binding ShowMarkPosition, Converter={StaticResource Vis}}">
+                        <c:OutlinedText Text="Where" Style="{StaticResource RowLabel}" Width="96" VerticalAlignment="Top" Margin="0,8,0,0"/>
+                        <ListBox Style="{StaticResource SpotPicker}" HorizontalAlignment="Left" AutomationProperties.Name="Proxy mark position"
+                                 ItemsSource="{x:Static v:Choices.MarkPositions}" SelectedValuePath="Value" SelectedValue="{Binding MarkPosition}"/>
+                    </DockPanel>
+                    <StackPanel Visibility="{Binding ShowMarkBorder, Converter={StaticResource Vis}}">
+                        <DockPanel Margin="0,4">
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                <c:OutlinedText Text="{Binding MarkBorderText}" Style="{StaticResource RowLabel}" Margin="0,0,10,0"/>
+                                <Button Style="{StaticResource LeatherButton}" Content="−" Width="38" Click="BorderThinner" AutomationProperties.Name="Thinner border"/>
+                                <Button Style="{StaticResource LeatherButton}" Content="+" Width="38" Margin="4,0,0,0" Click="BorderWider" AutomationProperties.Name="Wider border"/>
+                            </StackPanel>
+                            <c:OutlinedText Text="Border width (mm)" Style="{StaticResource RowLabel}"/>
+                        </DockPanel>
+                        <c:OrnamentCaption Size="15" Text="3 mm recolors the card's black edge; wider runs into the frame."/>
+                    </StackPanel>
+                </StackPanel>
+            </DockPanel>
+        </Expander>
+
         <!-- Paper and printer: the sheet size, and the printer's own reach -->
-        <Expander Style="{StaticResource FoldOut}" Margin="0,14,0,4" AutomationProperties.Name="Paper and printer">
+        <Expander Style="{StaticResource FoldOut}" AutomationProperties.Name="Paper and printer">
             <Expander.Header>
                 <DockPanel>
                     <c:OutlinedText DockPanel.Dock="Left" Text="Paper and printer" Style="{StaticResource RowLabel}"/>

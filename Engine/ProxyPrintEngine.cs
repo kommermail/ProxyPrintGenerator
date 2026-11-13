@@ -46,6 +46,8 @@ public sealed class PrintJobOptions
     public PaperSize Paper { get; init; } = PaperSize.Letter;
     /// The printer's reach, read from its driver, when fitting to it.
     public PrinterMargins? PrinterMargins { get; init; }
+    /// A PROXY label, colored border or logo on every card.
+    public ProxyMark Mark { get; init; } = ProxyMark.None;
 }
 
 public static class ProxyPrintEngine
@@ -218,10 +220,11 @@ public static class ProxyPrintEngine
             {
                 ct.ThrowIfCancellationRequested();
                 builder.BeginPage();
-                Func<Task<PreparedFace>> Loader(FaceRef r) => () =>
+                Func<Task<PreparedFace>> Loader(FaceRef r) => async () =>
                 {
                     var s = sources[r];
-                    return pipeline.PrepareFaceAsync(s.Url, s.Set, s.Collector, r.FaceIndex, o.Scale, ct);
+                    var face = await pipeline.PrepareFaceAsync(s.Url, s.Set, s.Collector, r.FaceIndex, o.Scale, ct).ConfigureAwait(false);
+                    return ProxyMarker.Apply(face, o.Mark, o.Calibration);
                 };
                 var pageFronts = plan.Pages[pageIndex];
                 for (var slot = 0; slot < pageFronts.Count; slot++)

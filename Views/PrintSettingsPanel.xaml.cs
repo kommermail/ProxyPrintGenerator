@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Media;
 using ProxyPrintGenerator.Controls;
 using ProxyPrintGenerator.Engine;
 
@@ -11,6 +12,83 @@ public static class Choices
     public static Choice[] Scales { get; } = [new(1, "300"), new(2, "600"), new(4, "1200"), new(6, "1800")];
     public static Choice[] Formats { get; } = [new(OutputFormat.Pdf, "PDF"), new(OutputFormat.Png, "PNG"), new(OutputFormat.Jpeg, "JPEG")];
     public static Choice[] SafeAreas { get; } = [new(SafeAreaProfile.None, "Off"), new(SafeAreaProfile.CanonInkjet, "Canon")];
+
+    public static Choice[] MarkKinds { get; } =
+        [new(ProxyMarkKind.None, "None"), new(ProxyMarkKind.Label, "PROXY label"), new(ProxyMarkKind.Border, "Border"), new(ProxyMarkKind.Logo, "Logo")];
+
+    public static Choice[] MarkPositions { get; } =
+    [
+        new(MarkPosition.TopLeft, "Top left"), new(MarkPosition.Top, "Top middle"), new(MarkPosition.TopRight, "Top right"),
+        new(MarkPosition.MiddleLeft, "Middle left"), new(MarkPosition.Middle, "Middle"), new(MarkPosition.MiddleRight, "Middle right"),
+        new(MarkPosition.BottomLeft, "Bottom left"), new(MarkPosition.Bottom, "Bottom middle"), new(MarkPosition.BottomRight, "Bottom right"),
+    ];
+
+    public static MarkFontChoice[] MarkFonts { get; } =
+    [
+        new(MarkFont.Cinzel, "Cinzel"), new(MarkFont.CinzelDecorative, "Cinzel Decorative"), new(MarkFont.FellEnglish, "Fell English"),
+        new(MarkFont.FellEnglishItalic, "Fell English Italic"), new(MarkFont.FaerieMoot, "Faerie Moot"),
+    ];
+
+    public static MarkSwatch[] MarkColors { get; } =
+    [
+        new("#C41C2C", "Red"), new("#141414", "Black"), new("#FAFAFA", "White"), new("#1E5AC8", "Blue"),
+        new("#1E8246", "Green"), new("#7A2E9E", "Purple"), new("#E0701A", "Orange"), new("#C9962F", "Gold"),
+    ];
+}
+
+/// One font the PROXY label can be lettered in, with what the picker needs
+/// to show "PROXY" in it.
+public sealed record MarkFontChoice(MarkFont Value, string Name)
+{
+    public FontFamily Family { get; } = ProxyMarkArt.FamilyFor(Value);
+    public FontWeight Weight { get; } = ProxyMarkArt.WeightFor(Value);
+    public FontStyle Style { get; } = ProxyMarkArt.StyleFor(Value);
+}
+
+/// One color the proxy mark can be.
+public sealed record MarkSwatch(string Hex, string Name)
+{
+    public Brush Brush { get; } = Theme.Freeze(new SolidColorBrush((Color)ColorConverter.ConvertFromString(Hex)));
+}
+
+/// A sample card with the chosen proxy mark on it, drawn the same way the
+/// build draws it.
+public sealed class ProxyMarkPreview : FrameworkElement
+{
+    public static readonly DependencyProperty MarkProperty = DependencyProperty.Register(nameof(Mark), typeof(ProxyMark), typeof(ProxyMarkPreview),
+        new FrameworkPropertyMetadata(ProxyMark.None, FrameworkPropertyMetadataOptions.AffectsRender));
+    public ProxyMark Mark { get => (ProxyMark)GetValue(MarkProperty); set => SetValue(MarkProperty, value); }
+
+    private static readonly Brush Edge = Theme.Brush(Color.FromRgb(20, 20, 20));
+    private static readonly Brush Frame = Theme.Freeze(new LinearGradientBrush(Color.FromRgb(58, 120, 78), Color.FromRgb(30, 78, 48), 90));
+    private static readonly Brush Bar = Theme.Brush(Color.FromRgb(226, 232, 220));
+    private static readonly Brush TextBox = Theme.Brush(Color.FromRgb(232, 239, 228));
+    private static readonly Brush Ink = Theme.Brush(Color.FromRgb(60, 60, 60), 0.55);
+    private static readonly Brush Sky = Theme.Freeze(new LinearGradientBrush(Color.FromRgb(70, 120, 120), Color.FromRgb(24, 52, 44), 90));
+    private static readonly Brush Hills = Theme.Brush(Color.FromRgb(16, 40, 30));
+
+    protected override void OnRender(DrawingContext dc)
+    {
+        var k = Math.Min(ActualWidth / ProxyMarkArt.CardW, ActualHeight / ProxyMarkArt.CardH);
+        if (k <= 0) return;
+        dc.PushTransform(new ScaleTransform(k, k));
+        dc.PushClip(new RectangleGeometry(new Rect(0, 0, ProxyMarkArt.CardW, ProxyMarkArt.CardH), 3, 3));
+        dc.DrawRectangle(Edge, null, new Rect(0, 0, 63, 88));
+        dc.DrawRoundedRectangle(Frame, null, new Rect(3, 3, 57, 82), 1.2, 1.2);
+        dc.DrawRoundedRectangle(Bar, null, new Rect(4.3, 4.3, 54.4, 5.2), 1.4, 1.4);
+        dc.DrawRectangle(Sky, null, new Rect(5, 10.5, 53, 38));
+        var hills = Geometry.Parse("M5,48.5 L5,36 C14,30 22,34 30,31 C38,28 46,33 58,29 L58,48.5 Z");
+        dc.DrawGeometry(Hills, null, hills);
+        dc.DrawRoundedRectangle(Bar, null, new Rect(4.3, 49.2, 54.4, 5.0), 1.4, 1.4);
+        dc.DrawRectangle(TextBox, null, new Rect(5, 55, 53, 26));
+        foreach (var y in new[] { 59.0, 63.0, 67.0, 72.0, 76.0 })
+            dc.DrawRectangle(Ink, null, new Rect(8, y, y > 70 ? 34 : 46, 1.1));
+        dc.DrawRectangle(Ink, null, new Rect(7, 5.9, 22, 1.8));
+        dc.DrawRectangle(Ink, null, new Rect(7, 50.8, 18, 1.8));
+        ProxyMarkArt.Draw(dc, Mark);
+        dc.Pop();
+        dc.Pop();
+    }
 }
 
 public partial class PrintSettingsPanel : UserControl
@@ -34,6 +112,8 @@ public partial class PrintSettingsPanel : UserControl
     private void GapDown(object s, RoutedEventArgs e) { if (Model != null) Model.ExtraGapMM -= 0.25; }
     private void GapUp(object s, RoutedEventArgs e) { if (Model != null) Model.ExtraGapMM += 0.25; }
     private void ReadAgain(object s, RoutedEventArgs e) => _ = ReadPrinterAsync(adoptDriverPaper: false);
+    private void BorderThinner(object s, RoutedEventArgs e) { if (Model != null) Model.MarkBorderMM -= 0.5; }
+    private void BorderWider(object s, RoutedEventArgs e) { if (Model != null) Model.MarkBorderMM += 0.5; }
 
     // MARK: - Fit to my printer
 

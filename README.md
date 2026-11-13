@@ -42,6 +42,7 @@ After that, the app can keep itself up to date. The first time it opens, it asks
   - Paper size, and **Fit to my printer**: the app reads your printer's driver for how much of each edge it can't print and keeps every card inside that, so no edge gets cut off.
   - Shift up, extra gap, max gap, and a Canon safe area, tucked under Print options.
   - Vibrance and midtone lift, with an Auto switch (40% vibrance, 12% lift) for more realistic proxies.
+  - Proxy mark, for proxies that should look like proxies: a **PROXY** label (in Cinzel, Cinzel Decorative, Fell English, Fell English Italic or Faerie Moot, all free to print with), a colored border (3 mm recolors the black edge), or the app's fox-and-trees logo, in your choice of color and spot on the card.
   - Low-ink calibration, in its own dropdown.
 - **Print sheet**
   - Always prints at actual size, with a page preview.

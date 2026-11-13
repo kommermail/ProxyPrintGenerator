@@ -32,9 +32,22 @@ public partial class App : Application
                 Engine.PrinterMargins? margins = null;
                 if (e.Args.FirstOrDefault(a => a.StartsWith("margins="))?[8..].Split(',').Select(s => double.Parse(s, CultureInfo.InvariantCulture)).ToArray() is [var t, var b, var l, var rt])
                     margins = new Engine.PrinterMargins(t, b, l, rt);
+                // mark=label|border|logo[,position[,RRGGBB[,borderMM[,font]]]], e.g. mark=logo,BottomRight,1E5AC8
+                var mark = Engine.ProxyMark.None;
+                if (e.Args.FirstOrDefault(a => a.StartsWith("mark="))?[5..].Split(',') is { Length: > 0 } m
+                    && Enum.TryParse<Engine.ProxyMarkKind>(m[0], true, out var kind))
+                {
+                    var pos = m.Length > 1 && Enum.TryParse<Engine.MarkPosition>(m[1], true, out var p) ? p : Engine.MarkPosition.TopLeft;
+                    var color = m.Length > 2 && m[2].Length == 6
+                        ? new Engine.RgbColor(Convert.ToInt32(m[2][..2], 16), Convert.ToInt32(m[2][2..4], 16), Convert.ToInt32(m[2][4..], 16))
+                        : Engine.ProxyMark.DefaultColor;
+                    var band = m.Length > 3 ? double.Parse(m[3], CultureInfo.InvariantCulture) : 3.0;
+                    var font = m.Length > 4 && Enum.TryParse<Engine.MarkFont>(m[4], true, out var f) ? f : Engine.MarkFont.Cinzel;
+                    mark = new Engine.ProxyMark(kind, color, pos, band, font);
+                }
                 var r = await Task.Run(() => Engine.ProxyPrintEngine.RunAsync(text, output,
                     new Engine.PrintJobOptions { Scale = scale, Format = format, PngOverride = true, BackToBack = e.Args.Contains("duplex"),
-                        Paper = paper, PrinterMargins = margins }, progress, CancellationToken.None));
+                        Paper = paper, PrinterMargins = margins, Mark = mark }, progress, CancellationToken.None));
                 var layout = new Engine.PrintSettings { Paper = paper, PrinterMargins = margins };
                 log.AppendLine($"OK {r.FrontCount} fronts, {r.BackCount} backs, {r.PageCount} pages (duplex from {r.DuplexStartPage}), {r.SizeBytes} bytes in {sw.Elapsed.TotalSeconds:0.0}s");
                 log.AppendLine($"paper {paper.Key} {paper.WidthMM}x{paper.HeightMM} mm, {layout.Columns}x{layout.Rows} = {layout.CardsPerPage} per page, " +

@@ -172,6 +172,52 @@ public sealed class PrintJobModel : Observable
     /// The Canon safe area only matters when not fitting to a printer.
     public bool ShowSafeArea => !FitToPrinter;
 
+    // MARK: - Proxy mark (remembered between sessions)
+
+    private ProxyMarkKind _markKind;
+    private string _markColor = "#C41C2C";
+    private MarkPosition _markPosition = MarkPosition.TopLeft;
+    private double _markBorderMM = 3.0;
+
+    public ProxyMarkKind MarkKind { get => _markKind; set { if (Set(ref _markKind, value)) SaveLayout(); } }
+    /// "#RRGGBB", one of Choices.MarkColors.
+    public string MarkColor { get => _markColor; set { if (value != null && Set(ref _markColor, value)) SaveLayout(); } }
+    public MarkPosition MarkPosition { get => _markPosition; set { if (Set(ref _markPosition, value)) SaveLayout(); } }
+    public double MarkBorderMM { get => _markBorderMM; set { if (Set(ref _markBorderMM, Math.Clamp(Math.Round(value * 2) / 2, 1.0, 6.0))) SaveLayout(); } }
+    private MarkFont _markFont = MarkFont.Cinzel;
+    /// The PROXY label's lettering.
+    public MarkFont MarkFont { get => _markFont; set { if (Set(ref _markFont, value)) SaveLayout(); } }
+
+    public ProxyMark Mark => new(MarkKind, ParseColor(MarkColor), MarkPosition, MarkBorderMM, MarkFont);
+
+    private static RgbColor ParseColor(string hex)
+    {
+        try { return new RgbColor(Convert.ToInt32(hex[1..3], 16), Convert.ToInt32(hex[3..5], 16), Convert.ToInt32(hex[5..7], 16)); }
+        catch { return ProxyMark.DefaultColor; }
+    }
+
+    public bool ShowMarkColor => MarkKind != ProxyMarkKind.None;
+    public bool ShowMarkPosition => MarkKind is ProxyMarkKind.Label or ProxyMarkKind.Logo;
+    public bool ShowMarkBorder => MarkKind == ProxyMarkKind.Border;
+    public bool ShowMarkFont => MarkKind == ProxyMarkKind.Label;
+    public string MarkBorderText => $"{MarkBorderMM:0.0}";
+
+    public string MarkSummary
+    {
+        get
+        {
+            var color = Views.Choices.MarkColors.FirstOrDefault(c => c.Hex == MarkColor)?.Name.ToLowerInvariant() ?? "colored";
+            var where = Views.Choices.MarkPositions.FirstOrDefault(c => Equals(c.Value, MarkPosition))?.Label.ToLowerInvariant() ?? "";
+            return MarkKind switch
+            {
+                ProxyMarkKind.Label => $"{color} PROXY label in {Views.Choices.MarkFonts.First(f => f.Value == MarkFont).Name}, {where}",
+                ProxyMarkKind.Border => $"{MarkBorderMM:0.#} mm {color} border",
+                ProxyMarkKind.Logo => $"{color} logo, {where}",
+                _ => "none",
+            };
+        }
+    }
+
     /// Picks up a change made on another page (the file is the truth).
     public void ReloadLayout()
     {
@@ -183,6 +229,11 @@ public sealed class PrintJobModel : Observable
             FitToPrinter = m.FitToPrinter;
             FitPrinter = m.FitPrinter;
             FitMargins = m.FitMargins is [var t, var b, var l, var r] ? new PrinterMargins(t, b, l, r) : null;
+            MarkKind = Enum.TryParse<ProxyMarkKind>(m.MarkKind, out var kind) ? kind : ProxyMarkKind.None;
+            MarkColor = m.MarkColor is { Length: 7 } c && c[0] == '#' ? c : "#C41C2C";
+            MarkPosition = Enum.TryParse<MarkPosition>(m.MarkPosition, out var pos) ? pos : MarkPosition.TopLeft;
+            MarkBorderMM = m.MarkBorderMM > 0 ? m.MarkBorderMM : 3.0;
+            MarkFont = Enum.TryParse<MarkFont>(m.MarkFont, out var font) ? font : MarkFont.Cinzel;
         }
         finally { _loadingLayout = false; }
     }
@@ -195,6 +246,8 @@ public sealed class PrintJobModel : Observable
             PaperKey = Paper.Key, PaperLabel = Paper.Label, PaperWidthMM = Paper.WidthMM, PaperHeightMM = Paper.HeightMM,
             FitToPrinter = FitToPrinter, FitPrinter = FitPrinter,
             FitMargins = FitMargins is { } m ? [m.Top, m.Bottom, m.Left, m.Right] : null,
+            MarkKind = MarkKind.ToString(), MarkColor = MarkColor, MarkPosition = MarkPosition.ToString(), MarkBorderMM = MarkBorderMM,
+            MarkFont = MarkFont.ToString(),
         }.Save();
     }
 
@@ -227,6 +280,8 @@ public sealed class PrintJobModel : Observable
         nameof(ShiftUpText), nameof(ExtraGapText), nameof(IsJpeg), nameof(CanPrint), nameof(ShowPrint),
         nameof(CanEditSettings), nameof(SettingsOpacity), nameof(AutoTone), nameof(PrintOptionsSummary), nameof(CalibrationSummary),
         nameof(PaperChoices), nameof(GridCaption), nameof(PaperSummary), nameof(ShowSafeArea),
+        nameof(Mark), nameof(ShowMarkColor), nameof(ShowMarkPosition), nameof(ShowMarkBorder), nameof(MarkBorderText), nameof(MarkSummary),
+        nameof(ShowMarkFont),
     ];
 
     /// Settings lock while a build runs, so the result always matches them.
@@ -241,6 +296,7 @@ public sealed class PrintJobModel : Observable
         nameof(MagentaBoost), nameof(YellowBoost), nameof(Vibrance), nameof(MidtoneLift), nameof(SafeArea), nameof(MaximizeGap),
         nameof(ShuffleBeforeRender), nameof(Format), nameof(JpegQuality), nameof(ShiftUpMM), nameof(ExtraGapMM), nameof(BackToBack),
         nameof(Paper), nameof(FitToPrinter), nameof(FitMargins),
+        nameof(MarkKind), nameof(MarkColor), nameof(MarkPosition), nameof(MarkBorderMM), nameof(MarkFont),
     ];
 
     private string? _staleNote;
@@ -256,7 +312,7 @@ public sealed class PrintJobModel : Observable
     private string InputSignature() => string.Join("|", DeckText, Scale, Guides, ThickGuides, UseCalibration, CyanBoost,
         MagentaBoost, YellowBoost, Vibrance, MidtoneLift, SafeArea, MaximizeGap, ShuffleBeforeRender, Format,
         Format == OutputFormat.Jpeg ? JpegQuality : 0, ShiftUpMM, ExtraGapMM, BackToBack, OutputName.Trim().ToLowerInvariant(),
-        Paper.Key, Paper.WidthMM, Paper.HeightMM, FitToPrinter ? FitMargins?.ToString() : "");
+        Paper.Key, Paper.WidthMM, Paper.HeightMM, FitToPrinter ? FitMargins?.ToString() : "", Mark);
 
     protected override void OnChanged(string? name)
     {
@@ -490,7 +546,7 @@ public sealed class PrintJobModel : Observable
                 Vibrance = Vibrance, MidtoneLift = MidtoneLift, PngOverride = PngOverride, ShuffleDeck = ShuffleBeforeRender,
                 SafeArea = SafeArea, MaximizeGap = MaximizeGap, ThickGuides = ThickGuides, Guides = Guides, Format = Format,
                 JpegQuality = JpegQuality, ExtraGapMM = ExtraGapMM, ShiftUpMM = ShiftUpMM, BackToBack = BackToBack,
-                Paper = Paper, PrinterMargins = FitToPrinter ? FitMargins : null,
+                Paper = Paper, PrinterMargins = FitToPrinter ? FitMargins : null, Mark = Mark,
             };
             var progress = new Progress<PrintProgress>(p => { StageText = p.Stage; Fraction = p.Fraction; });
             var text = DeckText;
@@ -531,6 +587,11 @@ public sealed class LayoutMemory
     public string? FitPrinter { get; set; }
     /// Top, bottom, left, right in mm.
     public double[]? FitMargins { get; set; }
+    public string? MarkKind { get; set; }
+    public string? MarkColor { get; set; }
+    public string? MarkPosition { get; set; }
+    public double MarkBorderMM { get; set; }
+    public string? MarkFont { get; set; }
 
     public PaperSize? Paper()
     {
