@@ -90,7 +90,7 @@ ProxyPrintGenerator.exe --build deck.txt out.pdf [1|2|4|6] [pdf|png|jpeg]
 
 ## Made with AI
 
-ProxyPrintGenerator was made with the help of AI tools: [Claude](https://claude.com) by Anthropic and Muse.
+ProxyPrintGenerator was made with the help of AI tools: [Claude](https://claude.com) by Anthropic and Muse by Meta.
 
 ## Support
 
