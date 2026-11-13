@@ -4,7 +4,7 @@
 
 # ProxyPrintGenerator
 
-Print playtest proxies of your decks on a home printer. Paste a deck list or open a `.txt` file, choose the printing for each card, and get print-ready Letter sheets. Each sheet holds nine cards at true size, with a border-color bleed and dotted cutting guides. You can save the result as a PDF, PNG or JPEG, or print it straight from the app.
+Print playtest proxies of your decks on a home printer. Paste a deck list or open a `.txt` file, choose the printing for each card, and get print-ready sheets on Letter, A4, Legal, 11×17, A3 or any paper size your printer lists. Letter and A4 hold nine cards at true size, 11×17 and A3 hold sixteen, each with a border-color bleed and dotted cutting guides. You can save the result as a PDF, PNG or JPEG, or print it straight from the app.
 
 
 ## Download
@@ -26,7 +26,8 @@ After that, the app can keep itself up to date. The first time it opens, it asks
 - **Deck Library**
   - Save decks.
   - Browse every card face: click to flip, double-click to zoom.
-  - Swap printings, replace cards (and undo), and edit quantities.
+  - Swap printings and replace cards (and undo).
+  - Edit the deck as list text, like a bulk editor: Ctrl+F finds lines, tick lines (or Ctrl+click them) to delete or replace them all at once, and any card Scryfall can't find gets a red underline.
   - Add cards through a Scryfall search.
   - Copy the deck list with every card's printing, such as `1 Plains (TRK) 361`.
 - **Quick Build**: paste a list and build it, with nothing saved.
@@ -36,6 +37,7 @@ After that, the app can keep itself up to date. The first time it opens, it asks
   - Cutting guides, regular or thick.
   - Shuffle the deck, with the commander kept first.
   - Two sided cards back to back: one sided cards come first, then front and back pages that print double sided, so each two sided card is one piece.
+  - Paper size, and **Fit to my printer**: the app reads your printer's driver for how much of each edge it can't print and keeps every card inside that, so no edge gets cut off.
   - Shift up, extra gap, max gap, and a Canon safe area, tucked under Print options.
   - Vibrance and midtone lift, with an Auto switch (40% vibrance, 12% lift) for more realistic proxies.
   - Low-ink calibration, in its own dropdown.
@@ -45,7 +47,7 @@ After that, the app can keep itself up to date. The first time it opens, it asks
   - Back to back builds print as two jobs: the one sided pages, then the double sided pages, flipped by the printer or by hand.
   - The driver's own quality and paper type lists, plus your printer's full Preferences window.
   - One-click paper presets: Plain, Canon Matte Photo, Photo Paper Plus Glossy II, and Glossy.
-  - Warns if your printer can't reach a card edge.
+  - Tells your printer the paper size the pages were built for, and warns if it doesn't take that paper or can't reach a card edge.
 - **Formats**
   - PDF: each unique face is stored once.
   - PNG: one tall image, verified after writing.
@@ -78,6 +80,7 @@ ProxyPrintGenerator.exe --build deck.txt out.pdf [1|2|4|6] [pdf|png|jpeg]
 |---|---|
 | Saved decks | `%APPDATA%\ProxyPrintGenerator\decks.json` (set `PPG_DATA_DIR` to use another folder) |
 | Last printer and paper | `%APPDATA%\ProxyPrintGenerator\print.json` |
+| Paper size and printer fit | `%APPDATA%\ProxyPrintGenerator\layout.json` |
 | Update check choice | `%APPDATA%\ProxyPrintGenerator\updates.json` |
 | Image caches | `%LOCALAPPDATA%\ProxyPrintGenerator\` (safe to delete) |
 | Finished builds | `Documents\ProxyPrintGenerator\` |

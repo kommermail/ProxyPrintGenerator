@@ -104,13 +104,13 @@ public static class PdfPrinter
     }
 
     /// The plain Windows print dialog, for anyone who wants it.
-    public static async Task<string?> PrintWithSystemDialogAsync(string pdfPath, int buildDpi, Action<string> status)
+    public static async Task<string?> PrintWithSystemDialogAsync(string pdfPath, int buildDpi, PaperSize paper, Action<string> status)
     {
         var doc = await OpenAsync(pdfPath);
         var count = (int)doc.PageCount;
         var dlg = new PrintDialog { UserPageRangeEnabled = true, MinPage = 1, MaxPage = (uint)count, PageRange = new PageRange(1, count) };
         var ticket = dlg.PrintTicket ?? new PrintTicket();
-        ticket.PageMediaSize = new PageMediaSize(PageMediaSizeName.NorthAmericaLetter);
+        ticket.PageMediaSize = PrinterFit.MediaSize(paper);
         ticket.PageOrientation = PageOrientation.Portrait;
         dlg.PrintTicket = ticket;
         if (dlg.ShowDialog() != true) return null;
@@ -232,7 +232,9 @@ public static class PrintSheet
         string? defaultName = null;
         try { defaultName = LocalPrintServer.GetDefaultPrintQueue().FullName; } catch { }
         var remembered = PrintMemory.Load();
-        var queue = queues.FirstOrDefault(q => q.FullName == remembered.Printer)
+        // The printer the cards were fitted to, else the last one used.
+        var queue = queues.FirstOrDefault(q => job.FitToPrinter && q.FullName == job.FitPrinter)
+                    ?? queues.FirstOrDefault(q => q.FullName == remembered.Printer)
                     ?? queues.FirstOrDefault(q => q.FullName == defaultName) ?? queues[0];
         PrintTicket ticket = null!;
         List<PaperPreset> presets = [];
@@ -255,7 +257,7 @@ public static class PrintSheet
             .FirstOrDefault(f => DriverTicket.Options(queue, ticket, f).Count > 0);
         var paperBox = new ListBox { FontSize = 13.5 };
         paperBox.SetResourceReference(FrameworkElement.StyleProperty, "Segmented");
-        paperBox.ToolTip = "One click paper setup: the paper type, High quality, Letter, and the printer's top resolution.";
+        paperBox.ToolTip = $"One click paper setup: the paper type, High quality, {result.Paper.ShortLabel}, and the printer's top resolution.";
         var paperHint = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 14.5, FontFamily = Theme.Fell, Foreground = Theme.Brush(Theme.Ink, 0.75) };
         var copies = 1;
         var copiesText = Label("1");
@@ -388,7 +390,7 @@ public static class PrintSheet
         void LoadQueue()
         {
             ticket = queue.UserPrintTicket?.Clone() ?? queue.DefaultPrintTicket?.Clone() ?? new PrintTicket();
-            ticket.PageMediaSize = new PageMediaSize(PageMediaSizeName.NorthAmericaLetter, 816, 1056);
+            ticket.PageMediaSize = PrinterFit.MediaSize(result.Paper);
             ticket.PageOrientation = PageOrientation.Portrait;
             ticket.CopyCount = copies;
             ticket = queue.MergeAndValidatePrintTicket(queue.DefaultPrintTicket ?? ticket, ticket).ValidatedPrintTicket;
@@ -411,7 +413,7 @@ public static class PrintSheet
 
         void ApplyPreset(PaperPreset preset)
         {
-            try { ticket = preset.Apply(queue, ticket); }
+            try { ticket = preset.Apply(queue, ticket, PrinterFit.MediaSize(result.Paper)); }
             catch (Exception e) { status.Text = $"That paper setting did not take: {e.Message}"; }
             Refresh();
         }
@@ -434,10 +436,14 @@ public static class PrintSheet
                 paperHint.Text = match?.Hint ?? "";
                 paperHint.Visibility = match == null ? Visibility.Collapsed : Visibility.Visible;
                 var dpi = Math.Clamp(Math.Min(job.ResultDpi, ticket.PageResolution?.X ?? 600), 300, 1200);
-                var size = ticket.PageMediaSize?.PageMediaSizeName?.ToString() ?? "Letter";
-                summary.Text = $"{Pretty(size)}, {ticket.PageOrientation?.ToString().ToLowerInvariant() ?? "portrait"}, actual size (100%). " +
+                summary.Text = $"{result.Paper.ShortLabel}, {ticket.PageOrientation?.ToString().ToLowerInvariant() ?? "portrait"}, actual size (100%). " +
                                $"Pages go out at {dpi} dpi" + (job.ResultDpi > dpi ? $" (the most this printer takes; the PDF holds {job.ResultDpi})." : ".");
-                warning.Text = ReachWarning(job, caps.PageImageableArea);
+                // The driver swaps in a paper it has when it doesn't list ours.
+                var onPaper = PrinterFit.FromMedia(ticket.PageMediaSize);
+                warning.Text = onPaper != null && !onPaper.SameSheet(result.Paper)
+                    ? $"Heads up: this printer doesn't list {result.Paper.ShortLabel} paper, the size these pages were built for, so it would print them " +
+                      $"on {onPaper.ShortLabel}. Pick a paper size it lists under Paper and printer and build again, or choose another printer."
+                    : ReachWarning(job, result.Paper, caps.PageImageableArea);
                 if (hasDuplex)
                 {
                     canAutoDuplex = caps.DuplexingCapability.Contains(Duplexing.TwoSidedLongEdge);
@@ -463,8 +469,6 @@ public static class PrintSheet
                 : (canAutoDuplex ? "" : "This printer can't print both sides by itself. ") +
                   $"The one sided pages print first, then the fronts of {range}. Put that stack back in the tray to print the backs on the other side, then press Print backs.";
         }
-
-        static string Pretty(string s) => s.Replace("NorthAmerica", "").Replace("ISO", "");
 
         static void Fill(ComboBox box, List<DriverOption> items, string? current)
         {
@@ -550,7 +554,7 @@ public static class PrintSheet
         {
             close();
             job.IsPrinting = true;
-            try { job.PrintStatus = await PdfPrinter.PrintWithSystemDialogAsync(result.OutputPath, job.ResultDpi, s => job.PrintStatus = s); }
+            try { job.PrintStatus = await PdfPrinter.PrintWithSystemDialogAsync(result.OutputPath, job.ResultDpi, result.Paper, s => job.PrintStatus = s); }
             catch (Exception e) { job.PrintStatus = $"Printing failed: {e.Message}"; }
             finally { job.IsPrinting = false; }
         };
@@ -664,18 +668,18 @@ public static class PrintSheet
 
     /// Compares where the cards sit against what the printer can reach,
     /// and says so plainly if a card edge would be cut off.
-    private static string ReachWarning(PrintJobModel job, PageImageableArea? area)
+    private static string ReachWarning(PrintJobModel job, PaperSize paper, PageImageableArea? area)
     {
         if (area == null) return "";
         const double mmPerDip = 25.4 / 96.0;
-        var settings = new PrintSettings { GapMM = 3.0 + job.ExtraGapMM, SafeArea = job.SafeArea, MaximizeGap = job.MaximizeGap, ShiftUpMM = job.ShiftUpMM };
-        var paperW = settings.PageWidthPoints / PageGeometry.PointsPerMM;
-        var paperH = settings.PageHeightPoints / PageGeometry.PointsPerMM;
-        var gaps = settings.ResolvedGapsMM();
+        var settings = job.LayoutSettings();
+        settings.Paper = paper;
+        var paperW = paper.WidthMM;
+        var paperH = paper.HeightMM;
         var left = settings.ResolvedLeftMarginMM();
         var top = settings.ResolvedTopMarginMM();
-        var gridW = 3 * 63 + 2 * gaps.Column;
-        var gridH = 3 * 88 + 2 * gaps.Row;
+        var gridW = settings.GridWidthMM;
+        var gridH = settings.GridHeightMM;
         var reachLeft = area.OriginWidth * mmPerDip;
         var reachTop = area.OriginHeight * mmPerDip;
         var reachRight = paperW - reachLeft - area.ExtentWidth * mmPerDip;
@@ -687,6 +691,7 @@ public static class PrintSheet
         if (paperW - left - gridW < reachRight - 0.05) problems.Add($"right ({reachRight:0.0} mm unreachable)");
         return problems.Count == 0 ? ""
             : "Heads up: this printer can't print all the way to the " + string.Join(", ", problems) +
-              ", so card edges there would be cut off. Turn on Safe area or Shift up and build again, or pick borderless in Printer preferences.";
+              ", so card edges there would be cut off. Turn on Fit to my printer (under Paper and printer) and build again, " +
+              "or pick borderless in Printer preferences.";
     }
 }

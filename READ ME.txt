@@ -2,8 +2,9 @@ ProxyPrintGenerator for Windows
 ================================
 
 Print playtest proxies of your decks: paste a deck list, pick printings,
-and get print-ready Letter sheets (3x3 cards at true size, with cutting
-guides), as PDF, PNG or JPEG, or print straight from the app.
+and get print-ready sheets on Letter, A4 or any paper size your printer
+lists (3x3 cards at true size on Letter and A4, 4x4 on 11x17 and A3,
+with cutting guides), as PDF, PNG or JPEG, or print straight from the app.
 
 RUNNING IT
 - Unzip anywhere and double click ProxyPrintGenerator.exe.
@@ -49,13 +50,15 @@ WHERE THINGS GO
 - Finished builds:  Documents\ProxyPrintGenerator\
 - Your decks:       %APPDATA%\ProxyPrintGenerator\decks.json
 - Update choice:    %APPDATA%\ProxyPrintGenerator\updates.json
+- Paper and fit:    %APPDATA%\ProxyPrintGenerator\layout.json
 - Image caches:     %LOCALAPPDATA%\ProxyPrintGenerator\  (safe to delete)
 
 PRINTING TIPS
 - Print at actual size. The app's own Print button always does this.
 - Most home inkjets print at 600 dpi, so a 600 dpi build ("600") is all
   they can use; higher scales are for print shops.
-- If the bottom row gets clipped, turn on Safe area or Shift up.
+- If a card edge gets clipped, turn on Fit to my printer (under Paper
+  and printer) and pick your printer, or use Shift up.
 
 NOT AFFILIATED
 ProxyPrintGenerator is unofficial Fan Content and is not approved or

@@ -116,7 +116,7 @@ public static class DriverTicket
     }
 }
 
-/// One click paper setup: the paper type, High quality, Letter, and the
+/// One click paper setup: the paper type, High quality, the build's paper size, and the
 /// printer's top resolution, matched against what the driver offers.
 public sealed record PaperPreset(string Label, string MediaOption, string QualityOption, string Hint)
 {
@@ -125,12 +125,12 @@ public sealed record PaperPreset(string Label, string MediaOption, string Qualit
         ("Plain", o => o.Name == "psk:Plain", "psk:Plain",
             "Plain paper at High quality: fine for test sheets and playtest proxies."),
         ("Matte Photo", o => o.Display.Contains("Matte Photo", StringComparison.OrdinalIgnoreCase), "psk:PhotographicMatte",
-            "Canon Matte Photo Paper, Letter: ink tuned for matte, no glare, and it takes a sleeve well. Print side is the brighter white side."),
+            "Canon Matte Photo Paper: ink tuned for matte, no glare, and it takes a sleeve well. Print side is the brighter white side."),
         ("Glossy II", o => o.Display.Contains("Plus Glossy II", StringComparison.OrdinalIgnoreCase), "psk:PhotographicHighGloss",
-            "Canon Photo Paper Plus Glossy II, Letter: the richest color and deepest blacks. Let prints dry a few minutes before cutting."),
+            "Canon Photo Paper Plus Glossy II: the richest color and deepest blacks. Let prints dry a few minutes before cutting."),
         ("Glossy", o => o.Display.Trim().StartsWith("Glossy Photo Paper", StringComparison.OrdinalIgnoreCase)
                         || o.Name.EndsWith(":GlossyPaperStandard", StringComparison.OrdinalIgnoreCase), "psk:PhotographicGlossy",
-            "Canon Glossy Photo Paper (everyday use), Letter. Let prints dry a few minutes before cutting."),
+            "Canon Glossy Photo Paper (everyday use). Let prints dry a few minutes before cutting."),
     ];
 
     /// The presets this printer can honor, by its own paper names.
@@ -150,10 +150,12 @@ public sealed record PaperPreset(string Label, string MediaOption, string Qualit
         return list;
     }
 
-    public PrintTicket Apply(PrintQueue q, PrintTicket t)
+    /// Sets the paper type and quality on the given paper size (the size
+    /// the pages were built for).
+    public PrintTicket Apply(PrintQueue q, PrintTicket t, PageMediaSize paperSize)
     {
         t = t.Clone();
-        t.PageMediaSize = new PageMediaSize(PageMediaSizeName.NorthAmericaLetter, 816, 1056);
+        t.PageMediaSize = paperSize;
         t.PageOrientation = PageOrientation.Portrait;
         t = q.MergeAndValidatePrintTicket(t, t).ValidatedPrintTicket;
         t = DriverTicket.With(q, t, "psk:PageMediaType", MediaOption);

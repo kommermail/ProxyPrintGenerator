@@ -20,6 +20,8 @@ public sealed record PrintJobResult(string OutputPath, int FrontCount, int BackC
     /// for duplex printing begin, or -1 when there are none.
     public int DuplexStartPage { get; init; } = -1;
     public int DuplexSheets => DuplexStartPage < 0 ? 0 : (PageCount - DuplexStartPage) / 2;
+    /// The paper the pages were laid out for, which the printer is told.
+    public PaperSize Paper { get; init; } = PaperSize.Letter;
 }
 
 public sealed class PrintJobOptions
@@ -41,6 +43,9 @@ public sealed class PrintJobOptions
     /// Two sided cards print back to back (duplex) after the one sided
     /// pages, instead of each back as its own card.
     public bool BackToBack { get; init; }
+    public PaperSize Paper { get; init; } = PaperSize.Letter;
+    /// The printer's reach, read from its driver, when fitting to it.
+    public PrinterMargins? PrinterMargins { get; init; }
 }
 
 public static class ProxyPrintEngine
@@ -162,11 +167,10 @@ public static class ProxyPrintEngine
         }
         GC.Collect();
 
-        var plan = o.BackToBack && twoSided.Count > 0
-            ? LayoutPlan.MakeBackToBack(copies.Where(c => c.Back == null).Select(c => c.Front).ToList(), twoSided)
-            : LayoutPlan.Make(fronts, backs);
         var settings = new PrintSettings
         {
+            Paper = o.Paper,
+            PrinterMargins = o.PrinterMargins,
             GapMM = 3.0 + o.ExtraGapMM,
             BufferMM = 1.0,
             ShowGuides = o.Guides,
@@ -176,6 +180,12 @@ public static class ProxyPrintEngine
             ThickGuides = o.ThickGuides,
             Calibration = o.Calibration,
         };
+        if (settings.CardsPerPage == 0)
+            throw new PpgException($"[PPG:PAPER-SMALL] {o.Paper.ShortLabel} paper is too small for a card once the printer's edges are left clear. " +
+                                   "Pick a bigger paper size.");
+        var plan = o.BackToBack && twoSided.Count > 0
+            ? LayoutPlan.MakeBackToBack(copies.Where(c => c.Back == null).Select(c => c.Front).ToList(), twoSided, settings.CardsPerPage, settings.Columns)
+            : LayoutPlan.Make(fronts, backs, settings.CardsPerPage);
 
         if (o.Format == OutputFormat.Jpeg)
         {
@@ -240,6 +250,6 @@ public static class ProxyPrintEngine
         builder.Dispose();
 
         return new PrintJobResult(outputPath, fronts.Count, backs.Count, plan.BackNames, plan.PageCount,
-            new FileInfo(outputPath).Length, parsed.Warnings) { DuplexStartPage = plan.DuplexStartPage };
+            new FileInfo(outputPath).Length, parsed.Warnings) { DuplexStartPage = plan.DuplexStartPage, Paper = o.Paper };
     }
 }

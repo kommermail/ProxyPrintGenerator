@@ -98,6 +98,106 @@ public sealed class PrintJobModel : Observable
     /// Two sided cards known to the deck page from its preview fetch.
     public int TwoSidedHint { get => _twoSidedHint; set => Set(ref _twoSidedHint, value); }
 
+    // MARK: - Paper and printer (remembered between sessions)
+
+    private PaperSize _paper = PaperSize.Letter;
+    private bool _fitToPrinter;
+    private string? _fitPrinter;
+    private PrinterMargins? _fitMargins;
+    private string _fitStatus = "";
+    private IReadOnlyList<PaperSize> _printerSizes = [];
+    private IReadOnlyList<string> _printers = [];
+    private bool _loadingLayout;
+
+    public PrintJobModel() => ReloadLayout();
+
+    public PaperSize Paper { get => _paper; set { if (value != null && Set(ref _paper, value)) SaveLayout(); } }
+    /// Keep the cards inside what FitPrinter's driver says it can reach.
+    public bool FitToPrinter { get => _fitToPrinter; set { if (Set(ref _fitToPrinter, value)) SaveLayout(); } }
+    /// A list that hasn't loaded yet can push null; only a load clears it.
+    public string? FitPrinter { get => _fitPrinter; set { if ((value != null || _loadingLayout) && Set(ref _fitPrinter, value)) SaveLayout(); } }
+    /// The reach last read from FitPrinter's driver, for Paper.
+    public PrinterMargins? FitMargins { get => _fitMargins; set { if (Set(ref _fitMargins, value)) SaveLayout(); } }
+    /// What the last read of the driver found, in a sentence.
+    public string FitStatus { get => _fitStatus; set => Set(ref _fitStatus, value); }
+    public IReadOnlyList<string> Printers { get => _printers; set => Set(ref _printers, value); }
+    /// The sizes FitPrinter's driver lists, for the paper picker.
+    public IReadOnlyList<PaperSize> PrinterSizes { get => _printerSizes; set => Set(ref _printerSizes, value); }
+
+    /// The paper picker: the standard sizes, then the printer's own, then
+    /// the chosen paper if it is none of those (a size from an earlier
+    /// printer).
+    public IReadOnlyList<PaperSize> PaperChoices
+    {
+        get
+        {
+            var list = PaperSize.Standard.ToList();
+            foreach (var p in PrinterSizes) if (!list.Any(s => s.SameSheet(p))) list.Add(p);
+            if (!list.Contains(Paper)) list.Add(Paper);
+            return list;
+        }
+    }
+
+    /// The page layout these settings make, as the engine will lay it out.
+    public PrintSettings LayoutSettings() => new()
+    {
+        Paper = Paper,
+        PrinterMargins = FitToPrinter ? FitMargins : null,
+        GapMM = 3.0 + ExtraGapMM,
+        SafeArea = SafeArea,
+        MaximizeGap = MaximizeGap,
+        ShiftUpMM = ShiftUpMM,
+    };
+
+    public string GridCaption
+    {
+        get
+        {
+            var s = LayoutSettings();
+            return s.CardsPerPage == 0
+                ? $"{Paper.ShortLabel} paper is too small for a card once the printer's edges are left clear."
+                : $"{s.CardsPerPage} card{(s.CardsPerPage == 1 ? "" : "s")} per page, {s.Columns} across and {s.Rows} down";
+        }
+    }
+
+    public string PaperSummary
+    {
+        get
+        {
+            var text = $"{Paper.ShortLabel}, {LayoutSettings().CardsPerPage} per page";
+            return FitToPrinter && FitPrinter != null ? $"{text}, fit to {FitPrinter}" : text;
+        }
+    }
+
+    /// The Canon safe area only matters when not fitting to a printer.
+    public bool ShowSafeArea => !FitToPrinter;
+
+    /// Picks up a change made on another page (the file is the truth).
+    public void ReloadLayout()
+    {
+        var m = LayoutMemory.Load();
+        _loadingLayout = true;
+        try
+        {
+            Paper = m.Paper() ?? PaperSize.Letter;
+            FitToPrinter = m.FitToPrinter;
+            FitPrinter = m.FitPrinter;
+            FitMargins = m.FitMargins is [var t, var b, var l, var r] ? new PrinterMargins(t, b, l, r) : null;
+        }
+        finally { _loadingLayout = false; }
+    }
+
+    private void SaveLayout()
+    {
+        if (_loadingLayout) return;
+        new LayoutMemory
+        {
+            PaperKey = Paper.Key, PaperLabel = Paper.Label, PaperWidthMM = Paper.WidthMM, PaperHeightMM = Paper.HeightMM,
+            FitToPrinter = FitToPrinter, FitPrinter = FitPrinter,
+            FitMargins = FitMargins is { } m ? [m.Top, m.Bottom, m.Left, m.Right] : null,
+        }.Save();
+    }
+
     public bool IsRunning { get => _isRunning; private set => Set(ref _isRunning, value); }
     public string StageText { get => _stageText; private set => Set(ref _stageText, value); }
     public double Fraction { get => _fraction; private set => Set(ref _fraction, value); }
@@ -126,6 +226,7 @@ public sealed class PrintJobModel : Observable
         nameof(CyanText), nameof(MagentaText), nameof(YellowText), nameof(VibranceText), nameof(MidtoneText),
         nameof(ShiftUpText), nameof(ExtraGapText), nameof(IsJpeg), nameof(CanPrint), nameof(ShowPrint),
         nameof(CanEditSettings), nameof(SettingsOpacity), nameof(AutoTone), nameof(PrintOptionsSummary), nameof(CalibrationSummary),
+        nameof(PaperChoices), nameof(GridCaption), nameof(PaperSummary), nameof(ShowSafeArea),
     ];
 
     /// Settings lock while a build runs, so the result always matches them.
@@ -139,6 +240,7 @@ public sealed class PrintJobModel : Observable
         nameof(DeckText), nameof(Scale), nameof(Guides), nameof(ThickGuides), nameof(UseCalibration), nameof(CyanBoost),
         nameof(MagentaBoost), nameof(YellowBoost), nameof(Vibrance), nameof(MidtoneLift), nameof(SafeArea), nameof(MaximizeGap),
         nameof(ShuffleBeforeRender), nameof(Format), nameof(JpegQuality), nameof(ShiftUpMM), nameof(ExtraGapMM), nameof(BackToBack),
+        nameof(Paper), nameof(FitToPrinter), nameof(FitMargins),
     ];
 
     private string? _staleNote;
@@ -153,7 +255,8 @@ public sealed class PrintJobModel : Observable
 
     private string InputSignature() => string.Join("|", DeckText, Scale, Guides, ThickGuides, UseCalibration, CyanBoost,
         MagentaBoost, YellowBoost, Vibrance, MidtoneLift, SafeArea, MaximizeGap, ShuffleBeforeRender, Format,
-        Format == OutputFormat.Jpeg ? JpegQuality : 0, ShiftUpMM, ExtraGapMM, BackToBack, OutputName.Trim().ToLowerInvariant());
+        Format == OutputFormat.Jpeg ? JpegQuality : 0, ShiftUpMM, ExtraGapMM, BackToBack, OutputName.Trim().ToLowerInvariant(),
+        Paper.Key, Paper.WidthMM, Paper.HeightMM, FitToPrinter ? FitMargins?.ToString() : "");
 
     protected override void OnChanged(string? name)
     {
@@ -209,7 +312,7 @@ public sealed class PrintJobModel : Observable
             if (BackToBack) on.Add("back to back");
             if (ShiftUpMM > 0) on.Add($"shift up {ShiftUpMM:0.0} mm");
             if (ExtraGapMM > 0) on.Add($"extra gap {ExtraGapMM:0.00} mm");
-            if (IsSafeAreaOn) on.Add("safe area");
+            if (IsSafeAreaOn && !FitToPrinter) on.Add("safe area");
             if (MaximizeGap) on.Add("max gap");
             return on.Count == 0 ? "all off" : string.Join(", ", on);
         }
@@ -221,8 +324,7 @@ public sealed class PrintJobModel : Observable
     {
         get
         {
-            var s = new PrintSettings { GapMM = 3.0 + ExtraGapMM, SafeArea = SafeArea, MaximizeGap = MaximizeGap };
-            var g = s.ResolvedGapsMM();
+            var g = LayoutSettings().ResolvedGapsMM();
             return $"Resolved gaps: {g.Row:0.0}mm between rows, {g.Column:0.0}mm between columns";
         }
     }
@@ -258,8 +360,8 @@ public sealed class PrintJobModel : Observable
             var cards = CardCount(DeckText);
             if (cards <= 0) return 0;
             var dpi = Scale * 300.0;
-            var pagePixels = 8.5 * dpi * (11.0 * dpi);
-            var pages = (int)Math.Ceiling(cards / 9.0);
+            var pagePixels = Paper.WidthMM / 25.4 * dpi * (Paper.HeightMM / 25.4 * dpi);
+            var pages = (int)Math.Ceiling(cards / (double)Math.Max(1, LayoutSettings().CardsPerPage));
             return Format switch
             {
                 OutputFormat.Pdf => (long)(cards * (63.0 / 25.4 * dpi) * (88.0 / 25.4 * dpi) * 0.95),
@@ -388,6 +490,7 @@ public sealed class PrintJobModel : Observable
                 Vibrance = Vibrance, MidtoneLift = MidtoneLift, PngOverride = PngOverride, ShuffleDeck = ShuffleBeforeRender,
                 SafeArea = SafeArea, MaximizeGap = MaximizeGap, ThickGuides = ThickGuides, Guides = Guides, Format = Format,
                 JpegQuality = JpegQuality, ExtraGapMM = ExtraGapMM, ShiftUpMM = ShiftUpMM, BackToBack = BackToBack,
+                Paper = Paper, PrinterMargins = FitToPrinter ? FitMargins : null,
             };
             var progress = new Progress<PrintProgress>(p => { StageText = p.Stage; Fraction = p.Fraction; });
             var text = DeckText;
@@ -413,5 +516,47 @@ public sealed class PrintJobModel : Observable
             IsRunning = false;
             OnChanged(null);
         }
+    }
+}
+
+/// The paper and printer fit, remembered between sessions in layout.json
+/// next to the decks.
+public sealed class LayoutMemory
+{
+    public string? PaperKey { get; set; }
+    public string? PaperLabel { get; set; }
+    public double PaperWidthMM { get; set; }
+    public double PaperHeightMM { get; set; }
+    public bool FitToPrinter { get; set; }
+    public string? FitPrinter { get; set; }
+    /// Top, bottom, left, right in mm.
+    public double[]? FitMargins { get; set; }
+
+    public PaperSize? Paper()
+    {
+        if (PaperKey == null) return null;
+        if (PaperSize.Standard.FirstOrDefault(p => p.Key == PaperKey) is { } standard) return standard;
+        return PaperWidthMM > 0 && PaperHeightMM > 0 ? new PaperSize(PaperKey, PaperLabel ?? PaperKey, PaperWidthMM, PaperHeightMM) : null;
+    }
+
+    private static string FilePath => Path.Combine(
+        Environment.GetEnvironmentVariable("PPG_DATA_DIR") is { Length: > 0 } custom ? custom
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ProxyPrintGenerator"),
+        "layout.json");
+
+    public static LayoutMemory Load()
+    {
+        try { return System.Text.Json.JsonSerializer.Deserialize<LayoutMemory>(File.ReadAllText(FilePath)) ?? new(); }
+        catch { return new(); }
+    }
+
+    public void Save()
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
+            File.WriteAllText(FilePath, System.Text.Json.JsonSerializer.Serialize(this));
+        }
+        catch { /* best effort */ }
     }
 }
