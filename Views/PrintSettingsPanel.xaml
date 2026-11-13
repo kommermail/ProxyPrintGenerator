@@ -16,61 +16,118 @@
         <ListBox Style="{StaticResource Segmented}" ItemsSource="{x:Static v:Choices.Scales}" SelectedValue="{Binding Scale}" Margin="0,4,0,0"/>
         <c:OrnamentCaption Text="Dots per inch" Size="18" Margin="0,4,0,6"/>
 
-        <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding Guides}">
+        <!-- Cutting guides: one row, two switches -->
+        <DockPanel Margin="0,4">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding Guides}" Margin="0,0,22,0"
+                          AutomationProperties.Name="Show cutting guides">
+                    <c:OutlinedText Text="Show" Size="19" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                </CheckBox>
+                <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding ThickGuides}" IsEnabled="{Binding Guides}"
+                          AutomationProperties.Name="Thick cutting guides">
+                    <c:OutlinedText Text="Thick" Size="19" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                </CheckBox>
+            </StackPanel>
             <c:OutlinedText Text="Cutting guides" Style="{StaticResource RowLabel}"/>
-        </CheckBox>
-        <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding ThickGuides}" Visibility="{Binding Guides, Converter={StaticResource Vis}}">
-            <c:OutlinedText Text="Thick guides" Style="{StaticResource RowLabel}"/>
-        </CheckBox>
+        </DockPanel>
         <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding ShuffleBeforeRender}">
             <c:OutlinedText Text="Shuffle before rendering" Style="{StaticResource RowLabel}"/>
         </CheckBox>
-        <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding BackToBack}">
-            <c:OutlinedText Text="Two sided cards back to back" Style="{StaticResource RowLabel}"/>
-        </CheckBox>
-        <c:OrnamentCaption Size="16" Visibility="{Binding BackToBack, Converter={StaticResource Vis}}"
-                           Text="One sided cards come first. Two sided cards follow as front and back pages that print double sided, so each card is one piece."/>
 
-        <DockPanel Margin="0,4">
-            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                <c:OutlinedText Text="{Binding ShiftUpText}" Style="{StaticResource RowLabel}" Margin="0,0,10,0"/>
-                <Button Style="{StaticResource LeatherButton}" Content="−" Width="38" Click="ShiftDown"/>
-                <Button Style="{StaticResource LeatherButton}" Content="+" Width="38" Margin="4,0,0,0" Click="ShiftUp"/>
-            </StackPanel>
-            <c:OutlinedText Text="Shift up (mm)" Style="{StaticResource RowLabel}"/>
-        </DockPanel>
-        <DockPanel Margin="0,4">
-            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                <c:OutlinedText Text="{Binding ExtraGapText}" Style="{StaticResource RowLabel}" Margin="0,0,10,0"/>
-                <Button Style="{StaticResource LeatherButton}" Content="−" Width="38" Click="GapDown"/>
-                <Button Style="{StaticResource LeatherButton}" Content="+" Width="38" Margin="4,0,0,0" Click="GapUp"/>
-            </StackPanel>
-            <c:OutlinedText Text="Extra gap (mm)" Style="{StaticResource RowLabel}"/>
-        </DockPanel>
-        <DockPanel Margin="0,4">
-            <ListBox DockPanel.Dock="Right" Width="200" FontSize="15" Style="{StaticResource Segmented}"
-                     ItemsSource="{x:Static v:Choices.SafeAreas}" SelectedValue="{Binding SafeArea}"/>
-            <c:OutlinedText Text="Safe area" Style="{StaticResource RowLabel}"/>
-        </DockPanel>
-        <c:OrnamentCaption Size="16" Visibility="{Binding IsSafeAreaOn, Converter={StaticResource Vis}}"
-                           Text="Cards stay inside the Canon printable area; the gaps shrink a little to fit."/>
-        <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding MaximizeGap}">
-            <c:OutlinedText Text="Max gap" Style="{StaticResource RowLabel}"/>
-        </CheckBox>
-        <c:OrnamentCaption Size="16" Text="{Binding ResolvedGapCaption}" Visibility="{Binding MaximizeGap, Converter={StaticResource Vis}}"/>
-
-        <!-- Low ink calibration -->
-        <c:SpectacularHeader Title="Low ink calibration" PipsOnSides="True"/>
-        <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding UseCalibration}">
-            <c:OutlinedText Text="Use calibration" Style="{StaticResource RowLabel}"/>
-        </CheckBox>
-        <StackPanel Visibility="{Binding UseCalibration, Converter={StaticResource Vis}}">
-            <v:SliderRow Label="Cyan boost" Minimum="0.8" Maximum="1.6" Value="{Binding CyanBoost}" ValueText="{Binding CyanText}"/>
-            <v:SliderRow Label="Magenta boost" Minimum="0.8" Maximum="1.6" Value="{Binding MagentaBoost}" ValueText="{Binding MagentaText}"/>
-            <v:SliderRow Label="Yellow boost" Minimum="0.8" Maximum="1.6" Value="{Binding YellowBoost}" ValueText="{Binding YellowText}"/>
-        </StackPanel>
+        <!-- The realism sticker: a foil "WOW!" sticker over the two sliders it
+             sells, with Auto for the preset (40% vibrance, 12% midtone lift) -->
+        <Grid Margin="10,26,10,10" HorizontalAlignment="Center" MaxWidth="660">
+            <Border CornerRadius="14" BorderBrush="White" BorderThickness="3" Padding="46,11,16,11"
+                    Background="{StaticResource FoilLinear}" RenderTransformOrigin="0.5,0.5">
+                <Border.RenderTransform><RotateTransform Angle="-1.5"/></Border.RenderTransform>
+                <Border.Effect><DropShadowEffect BlurRadius="9" ShadowDepth="3" Opacity="0.45"/></Border.Effect>
+                <Grid>
+                    <c:GlitterOverlay Seed="23"/>
+                    <DockPanel>
+                        <CheckBox DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding AutoTone}" Margin="16,0,0,0"
+                                  VerticalAlignment="Center" AutomationProperties.Name="Auto vibrance and lift"
+                                  ToolTip="Sets 40% vibrance and 12% midtone lift">
+                            <TextBlock Text="AUTO" FontFamily="{StaticResource PlaqueFont}" FontWeight="Black" FontSize="17"
+                                       Foreground="{StaticResource Ink}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        </CheckBox>
+                        <TextBlock TextWrapping="Wrap" FontFamily="{StaticResource PlaqueFont}" FontWeight="Bold" FontSize="17"
+                                   Foreground="{StaticResource Ink}" VerticalAlignment="Center"><Run Text="Increase your proxy realism with a little "/><Run Text="~vibrance and lift~" FontWeight="Black" Foreground="#7A1C8C"/><Run Text="!"/></TextBlock>
+                    </DockPanel>
+                </Grid>
+            </Border>
+            <c:Starburst Width="68" Height="68" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-26,-28,0,0"
+                         RenderTransformOrigin="0.5,0.5" IsHitTestVisible="False">
+                <c:Starburst.RenderTransform><RotateTransform Angle="-12"/></c:Starburst.RenderTransform>
+            </c:Starburst>
+        </Grid>
         <v:SliderRow Label="Vibrance" Minimum="0" Maximum="0.6" Value="{Binding Vibrance}" ValueText="{Binding VibranceText}"/>
         <v:SliderRow Label="Midtone lift" Minimum="0" Maximum="0.35" Value="{Binding MidtoneLift}" ValueText="{Binding MidtoneText}"/>
+
+        <!-- Print options: layout fixes most people never need -->
+        <Expander Style="{StaticResource FoldOut}" Margin="0,14,0,4" AutomationProperties.Name="Print options">
+            <Expander.Header>
+                <DockPanel>
+                    <c:OutlinedText DockPanel.Dock="Left" Text="Print options" Style="{StaticResource RowLabel}"/>
+                    <c:OutlinedText Text="{Binding PrintOptionsSummary}" Size="16" VerticalAlignment="Center" TextAlignment="Right"
+                                    HorizontalAlignment="Right" Margin="14,0,0,0"/>
+                </DockPanel>
+            </Expander.Header>
+            <StackPanel>
+                <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding BackToBack}">
+                    <c:OutlinedText Text="Two sided cards back to back" Style="{StaticResource RowLabel}"/>
+                </CheckBox>
+                <c:OrnamentCaption Size="16" Visibility="{Binding BackToBack, Converter={StaticResource Vis}}"
+                                   Text="One sided cards come first. Two sided cards follow as front and back pages that print double sided, so each card is one piece."/>
+                <DockPanel Margin="0,4">
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                        <c:OutlinedText Text="{Binding ShiftUpText}" Style="{StaticResource RowLabel}" Margin="0,0,10,0"/>
+                        <Button Style="{StaticResource LeatherButton}" Content="−" Width="38" Click="ShiftDown"/>
+                        <Button Style="{StaticResource LeatherButton}" Content="+" Width="38" Margin="4,0,0,0" Click="ShiftUp"/>
+                    </StackPanel>
+                    <c:OutlinedText Text="Shift up (mm)" Style="{StaticResource RowLabel}"/>
+                </DockPanel>
+                <DockPanel Margin="0,4">
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                        <c:OutlinedText Text="{Binding ExtraGapText}" Style="{StaticResource RowLabel}" Margin="0,0,10,0"/>
+                        <Button Style="{StaticResource LeatherButton}" Content="−" Width="38" Click="GapDown"/>
+                        <Button Style="{StaticResource LeatherButton}" Content="+" Width="38" Margin="4,0,0,0" Click="GapUp"/>
+                    </StackPanel>
+                    <c:OutlinedText Text="Extra gap (mm)" Style="{StaticResource RowLabel}"/>
+                </DockPanel>
+                <DockPanel Margin="0,4">
+                    <ListBox DockPanel.Dock="Right" Width="200" FontSize="15" Style="{StaticResource Segmented}"
+                             ItemsSource="{x:Static v:Choices.SafeAreas}" SelectedValue="{Binding SafeArea}"/>
+                    <c:OutlinedText Text="Safe area" Style="{StaticResource RowLabel}"/>
+                </DockPanel>
+                <c:OrnamentCaption Size="16" Visibility="{Binding IsSafeAreaOn, Converter={StaticResource Vis}}"
+                                   Text="Cards stay inside the Canon printable area; the gaps shrink a little to fit."/>
+                <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding MaximizeGap}">
+                    <c:OutlinedText Text="Max gap" Style="{StaticResource RowLabel}"/>
+                </CheckBox>
+                <c:OrnamentCaption Size="16" Text="{Binding ResolvedGapCaption}" Visibility="{Binding MaximizeGap, Converter={StaticResource Vis}}"/>
+            </StackPanel>
+        </Expander>
+
+        <!-- Low ink calibration: per channel boosts for a printer running dry -->
+        <Expander Style="{StaticResource FoldOut}" AutomationProperties.Name="Low ink calibration">
+            <Expander.Header>
+                <DockPanel>
+                    <c:OutlinedText DockPanel.Dock="Left" Text="Low ink calibration" Style="{StaticResource RowLabel}"/>
+                    <c:OutlinedText Text="{Binding CalibrationSummary}" Size="16" VerticalAlignment="Center" TextAlignment="Right"
+                                    HorizontalAlignment="Right" Margin="14,0,0,0"/>
+                </DockPanel>
+            </Expander.Header>
+            <StackPanel>
+                <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding UseCalibration}">
+                    <c:OutlinedText Text="Use calibration" Style="{StaticResource RowLabel}"/>
+                </CheckBox>
+                <StackPanel Visibility="{Binding UseCalibration, Converter={StaticResource Vis}}">
+                    <v:SliderRow Label="Cyan boost" Minimum="0.8" Maximum="1.6" Value="{Binding CyanBoost}" ValueText="{Binding CyanText}"/>
+                    <v:SliderRow Label="Magenta boost" Minimum="0.8" Maximum="1.6" Value="{Binding MagentaBoost}" ValueText="{Binding MagentaText}"/>
+                    <v:SliderRow Label="Yellow boost" Minimum="0.8" Maximum="1.6" Value="{Binding YellowBoost}" ValueText="{Binding YellowText}"/>
+                </StackPanel>
+            </StackPanel>
+        </Expander>
 
         <!-- Format -->
         <c:SpectacularHeader Title="Format" PipsOnSides="True"/>

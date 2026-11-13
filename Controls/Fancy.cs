@@ -301,3 +301,42 @@ public static class CardImages
         finally { Gate.Release(); }
     }
 }
+
+/// A spiky starburst badge, the kind a "WOW!" sticker sits on: a red
+/// burst with a white sticker edge and its text in the middle.
+public class Starburst : FrameworkElement
+{
+    public static readonly DependencyProperty TextProperty = DependencyProperty.Register(nameof(Text), typeof(string), typeof(Starburst),
+        new FrameworkPropertyMetadata("WOW!", FrameworkPropertyMetadataOptions.AffectsRender));
+    public string Text { get => (string)GetValue(TextProperty); set => SetValue(TextProperty, value); }
+
+    private static readonly Brush Burst = Theme.Freeze(new RadialGradientBrush(Color.FromRgb(255, 92, 56), Color.FromRgb(214, 32, 20)));
+    private static readonly Typeface Face = new(Theme.Plaque, FontStyles.Normal, FontWeights.Black, FontStretches.Normal);
+
+    protected override void OnRender(DrawingContext dc)
+    {
+        const int points = 14;
+        var c = new Point(ActualWidth / 2, ActualHeight / 2);
+        var outer = Math.Min(ActualWidth, ActualHeight) / 2 - 2;
+        var inner = outer * 0.76;
+        var geo = new StreamGeometry();
+        using (var g = geo.Open())
+        {
+            for (var i = 0; i < points * 2; i++)
+            {
+                var r = i % 2 == 0 ? outer : inner;
+                var a = Math.PI * i / points - Math.PI / 2;
+                var p = new Point(c.X + r * Math.Cos(a), c.Y + r * Math.Sin(a));
+                if (i == 0) g.BeginFigure(p, true, true); else g.LineTo(p, true, false);
+            }
+        }
+        geo.Freeze();
+        dc.DrawGeometry(Burst, new Pen(Brushes.White, 2.5) { LineJoin = PenLineJoin.Round }, geo);
+
+        var size = outer * 0.5;
+        var ft = new FormattedText(Text ?? "", System.Globalization.CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, Face, size, Brushes.White, 1.25);
+        var text = ft.BuildGeometry(new Point(c.X - ft.Width / 2, c.Y - ft.Height / 2));
+        dc.DrawGeometry(null, new Pen(Theme.Brush(Color.FromRgb(110, 10, 4)), size * 0.18) { LineJoin = PenLineJoin.Round }, text);
+        dc.DrawGeometry(Brushes.White, null, text);
+    }
+}

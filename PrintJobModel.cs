@@ -55,6 +55,33 @@ public sealed class PrintJobModel : Observable
     public double YellowBoost { get => _yellow; set => Set(ref _yellow, value); }
     public double Vibrance { get => _vibrance; set => Set(ref _vibrance, Math.Round(value / 0.05) * 0.05); }
     public double MidtoneLift { get => _midtone; set => Set(ref _midtone, Math.Round(value, 2)); }
+
+    /// The realism preset behind the Auto switch.
+    public const double AutoVibrance = 0.40, AutoMidtoneLift = 0.12;
+    private double _vibranceBeforeAuto, _midtoneBeforeAuto;
+
+    /// On whenever vibrance and lift sit at the preset (40% and 12%).
+    /// Turning it on applies the preset; turning it off puts back the
+    /// values from before. Moving either slider turns it off by itself.
+    public bool AutoTone
+    {
+        get => Math.Abs(Vibrance - AutoVibrance) < 0.001 && Math.Abs(MidtoneLift - AutoMidtoneLift) < 0.001;
+        set
+        {
+            if (value == AutoTone) return;
+            if (value)
+            {
+                (_vibranceBeforeAuto, _midtoneBeforeAuto) = (Vibrance, MidtoneLift);
+                Vibrance = AutoVibrance;
+                MidtoneLift = AutoMidtoneLift;
+            }
+            else
+            {
+                Vibrance = _vibranceBeforeAuto;
+                MidtoneLift = _midtoneBeforeAuto;
+            }
+        }
+    }
     public SafeAreaProfile SafeArea { get => _safeArea; set => Set(ref _safeArea, value); }
     public bool MaximizeGap { get => _maximizeGap; set => Set(ref _maximizeGap, value); }
     public bool ShuffleBeforeRender { get => _shuffle; set => Set(ref _shuffle, value); }
@@ -98,7 +125,7 @@ public sealed class PrintJobModel : Observable
         nameof(ResultSize), nameof(StatusLine), nameof(ResultWarnings), nameof(IsSafeAreaOn), nameof(JpegQualityText),
         nameof(CyanText), nameof(MagentaText), nameof(YellowText), nameof(VibranceText), nameof(MidtoneText),
         nameof(ShiftUpText), nameof(ExtraGapText), nameof(IsJpeg), nameof(CanPrint), nameof(ShowPrint),
-        nameof(CanEditSettings), nameof(SettingsOpacity),
+        nameof(CanEditSettings), nameof(SettingsOpacity), nameof(AutoTone), nameof(PrintOptionsSummary), nameof(CalibrationSummary),
     ];
 
     /// Settings lock while a build runs, so the result always matches them.
@@ -172,6 +199,23 @@ public sealed class PrintJobModel : Observable
     public string JpegQualityText => $"{(int)(JpegQuality * 100)}%";
     public bool IsJpeg => Format == OutputFormat.Jpeg;
     public bool IsSafeAreaOn => SafeArea != SafeAreaProfile.None;
+
+    /// What the closed Print options dropdown has turned on.
+    public string PrintOptionsSummary
+    {
+        get
+        {
+            var on = new List<string>();
+            if (BackToBack) on.Add("back to back");
+            if (ShiftUpMM > 0) on.Add($"shift up {ShiftUpMM:0.0} mm");
+            if (ExtraGapMM > 0) on.Add($"extra gap {ExtraGapMM:0.00} mm");
+            if (IsSafeAreaOn) on.Add("safe area");
+            if (MaximizeGap) on.Add("max gap");
+            return on.Count == 0 ? "all off" : string.Join(", ", on);
+        }
+    }
+
+    public string CalibrationSummary => UseCalibration ? "on" : "off";
 
     public string ResolvedGapCaption
     {

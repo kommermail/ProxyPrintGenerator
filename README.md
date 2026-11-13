@@ -36,8 +36,9 @@ After that, the app can keep itself up to date. The first time it opens, it asks
   - Cutting guides, regular or thick.
   - Shuffle the deck, with the commander kept first.
   - Two sided cards back to back: one sided cards come first, then front and back pages that print double sided, so each two sided card is one piece.
-  - Shift up, extra gap, max gap, and a Canon safe area.
-  - Low-ink calibration, vibrance and midtone lift.
+  - Shift up, extra gap, max gap, and a Canon safe area, tucked under Print options.
+  - Vibrance and midtone lift, with an Auto switch (40% vibrance, 12% lift) for more realistic proxies.
+  - Low-ink calibration, in its own dropdown.
 - **Print sheet**
   - Always prints at actual size, with a page preview.
   - Choose the printer, copies and page range.

@@ -46,9 +46,18 @@ public sealed class DeckDetailView : UserControl
         _deckId = deckId;
         var deck = Deck;
 
-        var back = new Button { Content = "‹  Deck Library", HorizontalAlignment = HorizontalAlignment.Left, FontSize = 17, Margin = new Thickness(16, 6, 0, 0) };
+        // The back button floats over the page's top left corner, so it is
+        // in reach however far down the deck you scroll. A spacer the same
+        // height holds its place at the top of the page.
+        var back = new Button
+        {
+            Content = "‹  Deck Library", HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top,
+            FontSize = 17, Margin = new Thickness(16, 6, 0, 0), ToolTip = "Back to the Deck Library",
+        };
         back.SetResourceReference(StyleProperty, "LeatherButton");
         back.Click += (_, _) => MainWindow.Instance.ShowLibrary();
+        var backSpace = new Border();
+        back.SizeChanged += (_, e) => backSpace.Height = e.NewSize.Height + back.Margin.Top;
 
         _nameplate.DeckName = deck?.Name ?? "";
         _nameplate.Committed += name =>
@@ -89,7 +98,7 @@ public sealed class DeckDetailView : UserControl
         delete.Click += (_, _) => { if (Deck is { } d) LibraryView.ConfirmDelete(d, MainWindow.Instance.ShowLibrary); };
 
         var stack = new StackPanel();
-        stack.Children.Add(back);
+        stack.Children.Add(backSpace);
         stack.Children.Add(_nameplate);
         stack.Children.Add(_sideboardNote);
         stack.Children.Add(bubble);
@@ -108,11 +117,15 @@ public sealed class DeckDetailView : UserControl
 
         var bar = new BuildBar { DataContext = _job, HasOptionsDrawer = true };
         bar.BeforeBuild += SyncJob;
-        Content = new PanelScaffold
-        {
-            Bar = bar,
-            Content = new ScrollViewer { Content = stack, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(0, 0, 6, 0) },
-        };
+        var scroll = new ScrollViewer { Content = stack, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(0, 0, 6, 0) };
+        // Once the page moves under it, a deeper shadow lifts the button
+        // off the cards.
+        var floating = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 14, ShadowDepth = 3, Opacity = 0.6 };
+        scroll.ScrollChanged += (_, e) => back.Effect = e.VerticalOffset > 2 ? floating : null;
+        var page = new Grid();
+        page.Children.Add(scroll);
+        page.Children.Add(back);
+        Content = new PanelScaffold { Bar = bar, Content = page };
 
         if (deck != null) _job.OutputName = deck.Name.Replace(' ', '-').ToLowerInvariant();
         _job.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(PrintJobModel.BackToBack) && Deck is { } d) RebuildTwoSidedBanner(d); };
@@ -308,7 +321,7 @@ public sealed class DeckDetailView : UserControl
         if (!_job.BackToBack)
             content.Children.Add(new OutlinedText
             {
-                Text = "Turn on \"Two sided cards back to back\" below to print each one as a single piece.",
+                Text = "Turn on \"Two sided cards back to back\" under Print options below to print each one as a single piece.",
                 Size = 16, Readable = true, BlackOutline = true, Wrap = true, TextAlignment = TextAlignment.Center,
                 HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 6, 0, 0),
             });
