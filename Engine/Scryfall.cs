@@ -242,6 +242,29 @@ public static class ScryfallClient
         return output;
     }
 
+    /// The names Scryfall has no card for, checked in batches of 50
+    /// through the collection endpoint (exact names; the front face name
+    /// of a two sided card counts as known).
+    public static async Task<HashSet<string>> UnknownNamesAsync(IReadOnlyList<string> names, CancellationToken ct)
+    {
+        var unknown = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < names.Count; index += 50)
+        {
+            var batch = names.Skip(index).Take(50).ToList();
+            var body = new { identifiers = batch.Select(n => new { name = n }) };
+            var (data, status) = await ScryfallTransport.SendAsync(() => new HttpRequestMessage(HttpMethod.Post,
+                "https://api.scryfall.com/cards/collection") { Content = JsonContent.Create(body) }, 4, 3, ct).ConfigureAwait(false);
+            if (status != HttpStatusCode.OK)
+                throw new PpgException($"[PPG:CARD-LOOKUP] Scryfall collection lookup failed: HTTP {(int)status}");
+            var decoded = JsonSerializer.Deserialize<CollectionResponse>(data, Json)!;
+            foreach (var nf in decoded.NotFound)
+                if (nf.TryGetValue("name", out var v) && v.ValueKind == JsonValueKind.String)
+                    unknown.Add(v.GetString()!);
+            if (index + 50 < names.Count) await Task.Delay(300, ct).ConfigureAwait(false);
+        }
+        return unknown;
+    }
+
     /// Resolves a name-only line to a concrete printing.
     public static async Task<ScryfallCard> LookupNamedAsync(string name, string? set, CancellationToken ct, int maxAttempts = 6)
     {

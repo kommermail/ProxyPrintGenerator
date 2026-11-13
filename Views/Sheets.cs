@@ -1,6 +1,6 @@
 // Sheets.cs
 // The deck page's sheets: the printing picker, the zoomed card, the
-// replace / add card search, and the deck list editor.
+// replace / add card search. The deck editor is in DeckTextEditor.cs.
 
 using System.Windows;
 using System.Windows.Controls;
@@ -208,6 +208,15 @@ public static class CardSearchSheet
     public static void ShowAdd(Guid deckId)
         => Show("Add a card", false, (o, qty) => DeckStore.Shared.AddCard(deckId, o.Name, o.Set, o.CollectorNumber, qty), null);
 
+    /// The search with the color and mana value filters, handing back the
+    /// card picked (the deck editor's "replace checked lines").
+    public static void ShowPick(string title, Action<ScryfallCard> onPick)
+        => Show(title, true, (o, _) => onPick(o), null);
+
+    /// The add search with its copies stepper, handing back the card and
+    /// how many (the deck editor's "Add a card").
+    public static void ShowAddPick(Action<ScryfallCard, int> onPick) => Show("Add a card", false, onPick, null);
+
     private static void Show(string title, bool replace, Action<ScryfallCard, int> onPick, string? currentName)
     {
         var name = SheetParts.Field("Card name", out var nameHost);
@@ -281,7 +290,7 @@ public static class CardSearchSheet
         var results = new ContentControl
         {
             Content = SheetParts.Note(replace
-                ? "Search by name, or filter by type, color, and mana value. The replacement keeps the same quantity and takes effect in the previews and the next build."
+                ? "Search by name, or filter by type, color, and mana value. The replacement keeps the same quantity."
                 : "Search by name or card type, set how many copies, then click a card to add it to the deck."),
         };
         var body = new DockPanel();
@@ -321,7 +330,8 @@ public static class CardSearchSheet
                 if (found.Count == 0) { results.Content = SheetParts.Note("No cards match. Loosen a filter and try again."); return; }
                 var stack = new StackPanel();
                 stack.Children.Add(SheetParts.Note(replace
-                    ? $"Click a card to replace {currentName} with it. One printing per card; you can change the printing afterwards."
+                    ? (currentName != null ? $"Click a card to replace {currentName} with it." : "Click a card to put it in place of the checked lines.")
+                      + " One printing per card; you can change the printing afterwards."
                     : $"Click a card to add {quantity} {(quantity == 1 ? "copy" : "copies")} to the deck. One printing per card; you can change the printing afterwards.", 15, 0.75));
                 var wrap = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Center };
                 foreach (var o in found)
@@ -337,57 +347,5 @@ public static class CardSearchSheet
         name.KeyDown += (_, e) => { if (e.Key == Key.Enter) Run(); };
         type.KeyDown += (_, e) => { if (e.Key == Key.Enter) Run(); };
         name.Focus();
-    }
-}
-
-/// The deck as its list: quantities step up and down, lines go away,
-/// and the add search drops new cards in. Changes land immediately.
-public static class DeckEditorSheet
-{
-    public static void Show(Guid deckId)
-    {
-        var list = new StackPanel();
-        var add = SheetParts.Gold("＋  Add a card");
-        add.Margin = new Thickness(0, 10, 0, 0);
-        add.Click += (_, _) => CardSearchSheet.ShowAdd(deckId);
-        var body = new DockPanel();
-        var footer = new StackPanel();
-        footer.Children.Add(SheetParts.Note("Changes apply to the card previews and the next build right away.", 15, 0.75));
-        footer.Children.Add(add);
-        DockPanel.SetDock(footer, Dock.Bottom);
-        body.Children.Add(footer);
-        body.Children.Add(SheetParts.Scroll(list));
-
-        void Rebuild()
-        {
-            list.Children.Clear();
-            if (DeckStore.Shared.Deck(deckId) is not { } deck) return;
-            for (var i = 0; i < deck.Entries.Count; i++)
-            {
-                var index = i;
-                var e = deck.Entries[i];
-                var row = new DockPanel { Margin = new Thickness(0, 3, 0, 3) };
-                var minus = SheetParts.Leather("−"); minus.Width = 34; minus.IsEnabled = e.Quantity > 1;
-                minus.Click += (_, _) => DeckStore.Shared.SetQuantity(deckId, index, e.Quantity - 1);
-                var qty = new TextBlock { Text = $"{e.Quantity}×", Width = 42, TextAlignment = TextAlignment.Center, FontSize = 18, VerticalAlignment = VerticalAlignment.Center,
-                    Foreground = Theme.Brush(Theme.Gold), FontFamily = Theme.Fell };
-                var plus = SheetParts.Leather("+"); plus.Width = 34;
-                plus.Click += (_, _) => DeckStore.Shared.SetQuantity(deckId, index, e.Quantity + 1);
-                var remove = SheetParts.Leather("Remove", 15);
-                remove.Click += (_, _) => DeckStore.Shared.RemoveCard(deckId, index);
-                DockPanel.SetDock(minus, Dock.Left); DockPanel.SetDock(qty, Dock.Left); DockPanel.SetDock(plus, Dock.Left); DockPanel.SetDock(remove, Dock.Right);
-                var text = new StackPanel { Margin = new Thickness(12, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
-                text.Children.Add(new TextBlock { Text = e.Name, FontSize = 18, Foreground = Theme.Brush(Theme.Parchment), FontFamily = Theme.Fell });
-                text.Children.Add(new TextBlock { Text = e.Board == "main" ? e.PrintingLabel : $"{e.PrintingLabel} · {e.Board}", FontSize = 13,
-                    Foreground = Theme.Brush(Theme.Parchment, 0.6), FontFamily = Theme.Fell });
-                row.Children.Add(minus); row.Children.Add(qty); row.Children.Add(plus); row.Children.Add(remove); row.Children.Add(text);
-                list.Children.Add(new Border { Child = row, BorderBrush = Theme.Brush(Theme.Gold, 0.2), BorderThickness = new Thickness(0, 0, 0, 1), Padding = new Thickness(0, 0, 0, 3) });
-            }
-        }
-        Rebuild();
-        DeckStore.Shared.Changed += Rebuild;
-        var deckName = DeckStore.Shared.Deck(deckId)?.Name ?? "deck";
-        var close = MainWindow.Instance.ShowSheet($"Edit {deckName}", body, 820);
-        body.Unloaded += (_, _) => DeckStore.Shared.Changed -= Rebuild;
     }
 }

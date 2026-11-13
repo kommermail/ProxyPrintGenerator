@@ -211,6 +211,56 @@ public sealed class DeckStore
     /// The deck as `qty Name (set) number` lines with current printings.
     public static string DeckText(SavedDeck deck) => Compose(deck, e => (e.SetCode, e.CollectorNumber));
 
+    /// The deck as the editor shows it: every line as saved, set codes in
+    /// capitals.
+    public static string EditorText(SavedDeck deck) => Compose(deck, e => (e.SetCode?.ToUpperInvariant(), e.CollectorNumber));
+
+    /// Rewrites the deck from edited list text. A line naming the same
+    /// card on the same board keeps its history (the imported printing
+    /// behind the ALT badge, a replace that can be undone): lines with
+    /// the very same printing first, then any line of that card. Returns
+    /// false, changing nothing, when the text holds no cards.
+    public bool ReplaceEntries(Guid deckId, string text)
+    {
+        var parsed = DeckList.Parse(text).Entries;
+        if (parsed.Count == 0) return false;
+        Mutate(deckId, d =>
+        {
+            var pool = d.Entries.ToList();
+            var boards = parsed.Select(e => BoardName(e.Board)).ToList();
+            var kept = new SavedCardLine?[parsed.Count];
+            static bool Same(string a, string b) => a.Equals(b, StringComparison.OrdinalIgnoreCase);
+            for (var pass = 0; pass < 2; pass++)
+                for (var i = 0; i < parsed.Count; i++)
+                {
+                    if (kept[i] != null) continue;
+                    var e = parsed[i];
+                    var match = pool.FirstOrDefault(o => o.Board == boards[i] && Same(o.Name, e.Name)
+                        && (pass == 1 || (o.SetCode == e.SetCode && o.CollectorNumber == e.CollectorNumber)));
+                    if (match == null) continue;
+                    pool.Remove(match);
+                    kept[i] = match;
+                }
+            d.Entries = parsed.Select((e, i) =>
+            {
+                if (kept[i] is { } line)
+                {
+                    line.Quantity = Math.Max(1, e.Quantity);
+                    line.Name = e.Name;
+                    line.SetCode = e.SetCode;
+                    line.CollectorNumber = e.CollectorNumber;
+                    return line;
+                }
+                return new SavedCardLine
+                {
+                    Quantity = Math.Max(1, e.Quantity), Name = e.Name, SetCode = e.SetCode, CollectorNumber = e.CollectorNumber,
+                    Board = boards[i], OriginalSetCode = e.SetCode, OriginalCollectorNumber = e.CollectorNumber,
+                };
+            }).ToList();
+        });
+        return true;
+    }
+
     /// The deck list to paste elsewhere: "4 Plains (TRK) 361", set codes in
     /// capitals. A line with no exact printing of its own takes the one
     /// Scryfall resolved for it (what the grid shows and the print uses),

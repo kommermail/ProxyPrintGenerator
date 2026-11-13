@@ -165,6 +165,17 @@ public static partial class DeckList
         return new DeckParseResult(entries, warnings);
     }
 
+    /// True for a line the parser reads as a section heading rather than
+    /// a card: "Sideboard", "Deck:", "Creatures:" style lines.
+    /// board is the board it switches to, when it switches one.
+    public static bool IsHeader(string line, out DeckBoard? board)
+    {
+        var t = line.Trim();
+        var name = t.EndsWith(':') ? t[..^1].Trim() : t;
+        board = BoardForHeader(name);
+        return board != null || (t.EndsWith(':') && !t.Contains('('));
+    }
+
     private static DeckBoard? BoardForHeader(string header) => header.ToLowerInvariant() switch
     {
         "deck" or "mainboard" or "main" or "commander" or "commanders" or "companion" => DeckBoard.Main,

@@ -46,8 +46,11 @@ public partial class MainWindow : Window
 
     /// Shows a sheet: a rounded leather panel with a title row and a
     /// Close button over a dimmed window. Returns the close action.
-    /// A compact sheet is only as tall as its content, centered.
-    public Action ShowSheet(string title, FrameworkElement body, double maxWidth = 980, FrameworkElement? headerExtra = null, bool compact = false)
+    /// A compact sheet is only as tall as its content, centered. canClose,
+    /// when given, is asked before the sheet closes (Close, Escape, or the
+    /// returned action) and can keep it open.
+    public Action ShowSheet(string title, FrameworkElement body, double maxWidth = 980, FrameworkElement? headerExtra = null, bool compact = false,
+        Func<bool>? canClose = null)
     {
         var dim = new Grid { Background = new SolidColorBrush(Color.FromArgb(150, 0, 0, 0)) };
         var panel = new Grid { MaxWidth = maxWidth, Margin = new Thickness(40, 34, 40, 34) };
@@ -89,6 +92,7 @@ public partial class MainWindow : Window
         void Close()
         {
             if (!_sheets.Contains(dim)) return;
+            if (canClose != null && !canClose()) return;
             SheetLayer.Children.Remove(dim);
             var rest = _sheets.Where(s => s != dim).Reverse().ToList();
             _sheets.Clear();
