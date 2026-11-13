@@ -6,6 +6,10 @@ and get print-ready sheets on Letter, A4 or any paper size your printer
 lists (3x3 cards at true size on Letter and A4, 4x4 on 11x17 and A3,
 with cutting guides), as PDF, PNG or JPEG, or print straight from the app.
 
+A little vibrance magic makes them look like the real thing: flip on
+Auto on the realism sticker and the app boosts the colors and lifts the
+midtones, so home prints come out bright and punchy instead of dull.
+
 RUNNING IT
 - Unzip anywhere and double click ProxyPrintGenerator.exe.
   Nothing to install; Windows 10 or 11, 64 bit.

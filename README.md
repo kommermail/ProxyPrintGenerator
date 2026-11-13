@@ -6,6 +6,8 @@
 
 Print playtest proxies of your decks on a home printer. Paste a deck list or open a `.txt` file, choose the printing for each card, and get print-ready sheets on Letter, A4, Legal, 11×17, A3 or any paper size your printer lists. Letter and A4 hold nine cards at true size, 11×17 and A3 hold sixteen, each with a border-color bleed and dotted cutting guides. You can save the result as a PDF, PNG or JPEG, or print it straight from the app.
 
+**A little vibrance magic makes them look like the real thing.** Home printers tend to print cards dull and dark. Flip the **Auto** switch on the realism sticker and the app boosts the colors and lifts the midtones, so your proxies come out bright and punchy, much closer to a real card in the sleeve.
+
 
 ## Download
 
