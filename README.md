@@ -11,7 +11,15 @@ Print playtest proxies of your decks on a home printer. Paste a deck list or ope
 
 Get the latest `ProxyPrintGenerator-…-win-x64.zip` from **[Releases](../../releases)**, unzip it, and run `ProxyPrintGenerator.exe`. It runs on Windows 10 or 11, 64-bit, and needs nothing installed. The first time you run it, Windows SmartScreen may warn you because the app isn't code-signed. Click **More info → Run anyway**.
 
-**Is it safe?** Yes. That warning appears for almost any new app without a paid code-signing certificate, and it's normal for this one. Every release is tested before it goes out: on the developer's own PC, and on a fresh Windows machine in the cloud, where it's also scanned with Microsoft Defender ([see the checks](../../actions/workflows/release-check.yml)). The app only connects to Scryfall, installs nothing, and collects no personal information. Each release lists a checksum so you can confirm your download is genuine.
+After that, the app can keep itself up to date. The first time it opens, it asks whether it may check GitHub for a newer version each time it starts. When there is one, it shows what's new and asks before installing. **Update now** downloads the release zip, checks it against the checksum GitHub lists, and restarts into the new version.
+
+**Is it safe?** Yes. That warning appears for almost any new app without a paid code-signing certificate, and it's normal for this one. Every release is tested before it goes out: on the developer's own PC, and on a fresh Windows machine in the cloud, where it's also scanned with Microsoft Defender ([see the checks](../../actions/workflows/release-check.yml)). The app connects only to Scryfall, plus GitHub if you allow update checks ([details](#what-the-app-connects-to)). It installs nothing beyond updating itself when you say so, and collects no personal information. Each release lists a checksum so you can confirm your download is genuine.
+
+## What the app connects to
+
+- **Scryfall** (`api.scryfall.com` and `cards.scryfall.io`), for card data and images.
+- **GitHub**, only if you turn on automatic update checks or click **Check for updates**. A check asks `api.github.com` for the newest version number, and nothing about you or your decks is sent. The release zip is downloaded from GitHub only when you click **Update now**.
+- **No other website.** The app refuses to download from anywhere else, and every connection is secure (HTTPS). The Ko-fi button and the release notes link open in your web browser, and only when you click them.
 
 ## Features
 
@@ -20,7 +28,9 @@ Get the latest `ProxyPrintGenerator-…-win-x64.zip` from **[Releases](../../rel
   - Browse every card face: click to flip, double-click to zoom.
   - Swap printings, replace cards (and undo), and edit quantities.
   - Add cards through a Scryfall search.
+  - Copy the deck list with every card's printing, such as `1 Plains (TRK) 361`.
 - **Quick Build**: paste a list and build it, with nothing saved.
+- **Updates**: with your OK, checks GitHub for a newer version when the app opens and installs it when you say so. Check by hand, or turn it off, at the bottom of the Deck Library.
 - **Print settings**
   - Scale: 300, 600, 1200 or 1800 dpi.
   - Cutting guides, regular or thick.
@@ -67,6 +77,7 @@ ProxyPrintGenerator.exe --build deck.txt out.pdf [1|2|4|6] [pdf|png|jpeg]
 |---|---|
 | Saved decks | `%APPDATA%\ProxyPrintGenerator\decks.json` (set `PPG_DATA_DIR` to use another folder) |
 | Last printer and paper | `%APPDATA%\ProxyPrintGenerator\print.json` |
+| Update check choice | `%APPDATA%\ProxyPrintGenerator\updates.json` |
 | Image caches | `%LOCALAPPDATA%\ProxyPrintGenerator\` (safe to delete) |
 | Finished builds | `Documents\ProxyPrintGenerator\` |
 

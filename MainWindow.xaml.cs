@@ -25,6 +25,7 @@ public partial class MainWindow : Window
         Tabs.SelectedIndex = 0;
         LibraryHost.Content = _library;
         SourceInitialized += (_, _) => DarkTitleBar();
+        Loaded += (_, _) => UpdatePrompts.OnStartup();
         PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape && _sheets.Count > 0) { CloseTopSheet(); e.Handled = true; } };
     }
 
@@ -45,10 +46,12 @@ public partial class MainWindow : Window
 
     /// Shows a sheet: a rounded leather panel with a title row and a
     /// Close button over a dimmed window. Returns the close action.
-    public Action ShowSheet(string title, FrameworkElement body, double maxWidth = 980, FrameworkElement? headerExtra = null)
+    /// A compact sheet is only as tall as its content, centered.
+    public Action ShowSheet(string title, FrameworkElement body, double maxWidth = 980, FrameworkElement? headerExtra = null, bool compact = false)
     {
         var dim = new Grid { Background = new SolidColorBrush(Color.FromArgb(150, 0, 0, 0)) };
         var panel = new Grid { MaxWidth = maxWidth, Margin = new Thickness(40, 34, 40, 34) };
+        if (compact) panel.VerticalAlignment = VerticalAlignment.Center;
         panel.Children.Add(new Border
         {
             CornerRadius = new CornerRadius(22),

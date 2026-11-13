@@ -16,7 +16,6 @@ namespace ProxyPrintGenerator.Views;
 public sealed class LibraryView : UserControl
 {
     private readonly StackPanel _list = new() { Margin = new Thickness(20, 0, 20, 10) };
-    private const int HighestFileVersion = 58;
 
     public LibraryView()
     {
@@ -48,9 +47,10 @@ public sealed class LibraryView : UserControl
         stack.Children.Add(_list);
         stack.Children.Add(new OutlinedText
         {
-            Text = $"Version {1.0 + HighestFileVersion / 100.0:0.00}", Size = 17, HorizontalAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(0, 10, 0, 4),
+            Text = $"Version {Updater.Label(Updater.CurrentVersion)}", Size = 17, HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 10, 0, 2),
         });
+        stack.Children.Add(UpdateControls());
         // A quiet tip jar, never in the way.
         var kofi = new Button { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 16), ToolTip = "ko-fi.com/kommermail" };
         kofi.SetResourceReference(StyleProperty, "PlainButton");
@@ -62,6 +62,42 @@ public sealed class LibraryView : UserControl
         Content = new PanelScaffold { Content = new ScrollViewer { Content = stack, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(0, 0, 6, 0) } };
         DeckStore.Shared.Changed += Refresh;
         Refresh();
+    }
+
+    /// Under the version: check GitHub now, and the launch check switch.
+    private static FrameworkElement UpdateControls()
+    {
+        var panel = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 8) };
+        var check = new Button { HorizontalAlignment = HorizontalAlignment.Center, ToolTip = "Ask GitHub whether a newer version is out" };
+        check.SetResourceReference(StyleProperty, "LeatherButton");
+        check.Content = "Check for updates";
+        System.Windows.Automation.AutomationProperties.SetName(check, "Check for updates");
+        var result = new OutlinedText { Size = 16, Wrap = true, TextAlignment = TextAlignment.Center, MaxWidth = 620, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 4, 0, 0), Visibility = Visibility.Collapsed };
+        check.Click += async (_, _) =>
+        {
+            check.IsEnabled = false;
+            result.Text = "Checking GitHub...";
+            result.Visibility = Visibility.Visible;
+            var line = await UpdatePrompts.CheckAsync(manual: true);
+            check.IsEnabled = true;
+            if (line != null) result.Text = line;
+        };
+
+        var auto = new CheckBox { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 6, 0, 0) };
+        auto.SetResourceReference(StyleProperty, "Switch");
+        auto.Content = new OutlinedText { Text = "Check for updates when the app opens", Size = 16, Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center };
+        System.Windows.Automation.AutomationProperties.SetName(auto, "Check for updates when the app opens");
+        var syncing = false;
+        void Sync() { syncing = true; auto.IsChecked = UpdateSettings.Load().CheckAtStartup == true; syncing = false; }
+        Sync();
+        auto.Checked += (_, _) => { if (!syncing) UpdatePrompts.SetCheckAtStartup(true); };
+        auto.Unchecked += (_, _) => { if (!syncing) UpdatePrompts.SetCheckAtStartup(false); };
+        UpdatePrompts.SettingsChanged += Sync;
+
+        panel.Children.Add(check);
+        panel.Children.Add(result);
+        panel.Children.Add(auto);
+        return panel;
     }
 
     public void Refresh()
