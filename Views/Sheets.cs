@@ -56,11 +56,14 @@ internal static class SheetParts
     {
         var img = new Image { Stretch = Stretch.Uniform, Height = width * 88 / 63, Width = width };
         img.Clip = new RectangleGeometry(new Rect(0, 0, width, width * 88 / 63), 8, 8);
-        _ = Load(img, option.DisplayImageUrl);
+        var loading = new TextBlock { Text = "Loading…", FontFamily = Theme.Fell, FontSize = 14, Foreground = Theme.Brush(Theme.Parchment, 0.85),
+            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        _ = Load(img, option.DisplayImageUrl, loading);
         var stack = new StackPanel { Width = width, Margin = new Thickness(7) };
         var frame = new Grid();
         frame.Children.Add(new Border { CornerRadius = new CornerRadius(8), Background = Theme.Brush(Colors.Black, 0.25), Height = width * 88 / 63 });
         frame.Children.Add(img);
+        frame.Children.Add(loading);
         if (current) frame.Children.Add(new Border { CornerRadius = new CornerRadius(8), BorderBrush = Theme.Brush(Theme.Gold), BorderThickness = new Thickness(3) });
         stack.Children.Add(frame);
         stack.Children.Add(new TextBlock { Text = caption, Foreground = Theme.Brush(Theme.Parchment), FontSize = 14.5, TextAlignment = TextAlignment.Center,
@@ -76,7 +79,11 @@ internal static class SheetParts
         return btn;
     }
 
-    private static async Task Load(Image img, string? url) => img.Source = await CardImages.GetAsync(url, 360);
+    private static async Task Load(Image img, string? url, TextBlock? loading = null)
+    {
+        img.Source = await CardImages.GetAsync(url, 360);
+        if (loading != null) loading.Visibility = Visibility.Collapsed;
+    }
 
     public static ScrollViewer Scroll(UIElement content) => new()
     {
@@ -146,11 +153,17 @@ public static class CardZoomSheet
         var scale = new ScaleTransform(1, 1);
         image.RenderTransform = scale; image.RenderTransformOrigin = new Point(0.5, 0.5);
         image.SizeChanged += (_, e) => image.Clip = new RectangleGeometry(new Rect(e.NewSize), e.NewSize.Width * 0.045, e.NewSize.Width * 0.045);
+        var loading = new OutlinedText { Text = "Loading…", Size = 20, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed };
+        var imageHost = new Grid { HorizontalAlignment = HorizontalAlignment.Center };
+        imageHost.Children.Add(image);
+        imageHost.Children.Add(loading);
 
         async Task ShowFace()
         {
             var url = flipped ? (card?.HasBackFace == true ? card.FaceImageUrl(1) : ScryfallClient.CardBackImageUrl) : card?.FaceImageUrl(0);
+            loading.Visibility = url != null ? Visibility.Visible : Visibility.Collapsed;
             image.Source = await CardImages.GetAsync(url);
+            loading.Visibility = Visibility.Collapsed;
         }
 
         var flip = SheetParts.Leather("⟲  Flip card", 18);
@@ -177,7 +190,7 @@ public static class CardZoomSheet
                 Child = new TextBlock { Text = "ALT PRINTING", FontWeight = FontWeights.Bold, FontSize = 12, FontFamily = new FontFamily("Segoe UI") } });
 
         var stack = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
-        stack.Children.Add(image);
+        stack.Children.Add(imageHost);
         stack.Children.Add(flip);
         stack.Children.Add(info);
         var change = SheetParts.Gold("Change printing");

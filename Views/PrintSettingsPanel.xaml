@@ -237,23 +237,6 @@
                     <c:OutlinedText Text="Paper size" Style="{StaticResource RowLabel}"/>
                 </DockPanel>
                 <c:OrnamentCaption Size="16" Text="{Binding GridCaption}" Margin="0,2,0,6"/>
-                <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding FitToPrinter}" AutomationProperties.Name="Fit to my printer">
-                    <c:OutlinedText Text="Fit to my printer" Style="{StaticResource RowLabel}"/>
-                </CheckBox>
-                <StackPanel Visibility="{Binding FitToPrinter, Converter={StaticResource Vis}}">
-                    <DockPanel Margin="0,4">
-                        <Button DockPanel.Dock="Right" Style="{StaticResource LeatherButton}" Content="Read again" Margin="8,0,0,0" Click="ReadAgain"
-                                ToolTip="Ask the printer's driver again (after changing its settings, say)"/>
-                        <ComboBox DockPanel.Dock="Right" Width="340" FontFamily="{StaticResource FellFont}" FontSize="16" Padding="8,4"
-                                  ItemsSource="{Binding Printers}" SelectedItem="{Binding FitPrinter}" AutomationProperties.Name="Printer to fit"/>
-                        <c:OutlinedText Text="Printer" Style="{StaticResource RowLabel}"/>
-                    </DockPanel>
-                    <Border CornerRadius="8" Background="#30FFF8E8" Padding="10,6" Margin="0,4,0,4"
-                            Visibility="{Binding FitStatus, Converter={StaticResource Vis}}">
-                        <TextBlock Text="{Binding FitStatus}" TextWrapping="Wrap" FontFamily="{StaticResource FellFont}" FontSize="16"
-                                   Foreground="{StaticResource Ink}"/>
-                    </Border>
-                </StackPanel>
                 <c:OrnamentCaption Size="15" Margin="0,4,0,0"
                                    Text="When you print from the app, your printer is told to use this paper size."/>
             </StackPanel>
@@ -290,14 +273,50 @@
                     </StackPanel>
                     <c:OutlinedText Text="Extra gap (mm)" Style="{StaticResource RowLabel}"/>
                 </DockPanel>
-                <StackPanel Visibility="{Binding ShowSafeArea, Converter={StaticResource Vis}}">
+                <DockPanel Margin="0,4">
+                    <ListBox DockPanel.Dock="Right" Width="260" FontSize="15" Style="{StaticResource Segmented}"
+                             ItemsSource="{x:Static v:Choices.MarginModes}" SelectedValue="{Binding MarginChoice}"/>
+                    <c:OutlinedText Text="Safe area" Style="{StaticResource RowLabel}"/>
+                </DockPanel>
+                <StackPanel Visibility="{Binding FitToPrinter, Converter={StaticResource Vis}}">
                     <DockPanel Margin="0,4">
-                        <ListBox DockPanel.Dock="Right" Width="200" FontSize="15" Style="{StaticResource Segmented}"
-                                 ItemsSource="{x:Static v:Choices.SafeAreas}" SelectedValue="{Binding SafeArea}"/>
-                        <c:OutlinedText Text="Safe area" Style="{StaticResource RowLabel}"/>
+                        <Button DockPanel.Dock="Right" Style="{StaticResource LeatherButton}" Content="Read again" Margin="8,0,0,0" Click="ReadAgain"
+                                ToolTip="Ask the printer's driver again (after changing its settings, say)"/>
+                        <ComboBox DockPanel.Dock="Right" Width="340" FontFamily="{StaticResource FellFont}" FontSize="16" Padding="8,4"
+                                  ItemsSource="{Binding Printers}" SelectedItem="{Binding FitPrinter}" AutomationProperties.Name="Printer to fit"/>
+                        <c:OutlinedText Text="Printer" Style="{StaticResource RowLabel}"/>
                     </DockPanel>
-                    <c:OrnamentCaption Size="16" Visibility="{Binding IsSafeAreaOn, Converter={StaticResource Vis}}"
-                                       Text="Cards stay inside the Canon printable area; the gaps shrink a little to fit."/>
+                    <Border CornerRadius="8" Padding="10,6" Margin="0,4,0,4"
+                            Visibility="{Binding FitStatus, Converter={StaticResource Vis}}">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="#30FFF8E8"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding FitStatusIsSuccess}" Value="True">
+                                        <Setter Property="Background" Value="#332E7D32"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Left" Text="✓" FontSize="16" FontWeight="Bold" Foreground="#FF2E7D32"
+                                       Margin="0,1,7,0" Visibility="{Binding FitStatusIsSuccess, Converter={StaticResource Vis}}"/>
+                            <TextBlock Text="{Binding FitStatus}" TextWrapping="Wrap" FontFamily="{StaticResource FellFont}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="FontSize" Value="16"/>
+                                        <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding FitStatusIsSuccess}" Value="True">
+                                                <Setter Property="FontSize" Value="17"/>
+                                                <Setter Property="Foreground" Value="#FF1E5B24"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </DockPanel>
+                    </Border>
                 </StackPanel>
                 <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding MaximizeGap}">
                     <c:OutlinedText Text="Max gap" Style="{StaticResource RowLabel}"/>

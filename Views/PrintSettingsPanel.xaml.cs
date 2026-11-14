@@ -11,7 +11,7 @@ public static class Choices
 {
     public static Choice[] Scales { get; } = [new(1, "300"), new(2, "600"), new(4, "1200"), new(6, "1800")];
     public static Choice[] Formats { get; } = [new(OutputFormat.Pdf, "PDF"), new(OutputFormat.Png, "PNG"), new(OutputFormat.Jpeg, "JPEG")];
-    public static Choice[] SafeAreas { get; } = [new(SafeAreaProfile.None, "Off"), new(SafeAreaProfile.CanonInkjet, "Canon")];
+    public static Choice[] MarginModes { get; } = [new(MarginMode.Off, "Off"), new(MarginMode.Fit, "Fit to my printer")];
 
     public static Choice[] MarkKinds { get; } =
         [new(ProxyMarkKind.None, "None"), new(ProxyMarkKind.Label, "PROXY label"), new(ProxyMarkKind.Border, "Border"), new(ProxyMarkKind.Logo, "Logo")];
@@ -130,7 +130,11 @@ public partial class PrintSettingsPanel : UserControl
         _quiet = true;
         try { m.ReloadLayout(); } finally { _quiet = false; }
         if (m.Printers.Count == 0) m.Printers = await PrinterFit.PrinterNamesAsync();
-        if (m.FitToPrinter) await ReadPrinterAsync(adoptDriverPaper: false);
+        if (m.FitToPrinter)
+        {
+            if (m.FitPrinter == null) await PickFitPrinterAsync(m);
+            await ReadPrinterAsync(adoptDriverPaper: false);
+        }
     }
 
     private void OnModelChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -154,20 +158,29 @@ public partial class PrintSettingsPanel : UserControl
         }
     }
 
-    /// The first time on: the printer last printed to, or Windows'
-    /// default, then that printer's own paper.
+    /// Switching Fit on: pick a printer, then start from that
+    /// printer's own paper.
     private async Task TurnOnFitAsync(PrintJobModel m)
+    {
+        if (await PickFitPrinterAsync(m)) await ReadPrinterAsync(adoptDriverPaper: true);
+    }
+
+    /// Choose the printer for Fit: the one already picked, else the
+    /// printer last printed to, else Windows' default, else the first
+    /// installed. False, with the reason left in the status, when
+    /// there are no printers at all.
+    private async Task<bool> PickFitPrinterAsync(PrintJobModel m)
     {
         if (m.Printers.Count == 0) m.Printers = await PrinterFit.PrinterNamesAsync();
         if (m.FitPrinter == null || !m.Printers.Contains(m.FitPrinter))
         {
             var pick = new[] { PrintMemory.Load().Printer, PrinterFit.DefaultPrinter() }.FirstOrDefault(p => p != null && m.Printers.Contains(p))
                        ?? m.Printers.FirstOrDefault();
-            if (pick == null) { m.FitStatus = "No printers are installed on this PC."; return; }
+            if (pick == null) { m.FitStatus = "No printers are installed on this PC."; return false; }
             _quiet = true;
             try { m.FitPrinter = pick; } finally { _quiet = false; }
         }
-        await ReadPrinterAsync(adoptDriverPaper: true);
+        return true;
     }
 
     private async Task ReadPrinterAsync(bool adoptDriverPaper)
@@ -194,10 +207,9 @@ public partial class PrintSettingsPanel : UserControl
                                           "Pick a paper size it lists, or another printer.",
                 { Margins: null } => $"{printer} didn't say where it can print, so the cards are laid out without its edges.",
                 { Margins: { } x } when x.Top + x.Bottom + x.Left + x.Right < 0.1 =>
-                    $"{printer} prints edge to edge on {m.Paper.ShortLabel} (borderless), so the cards just stay 1 mm in from the edge.",
-                { Margins: { } x } => $"{printer} can't print the outer {x.Top:0.0} mm at the top, {x.Bottom:0.0} mm at the bottom, " +
-                                      $"{x.Left:0.0} mm on the left and {x.Right:0.0} mm on the right of {m.Paper.ShortLabel} paper. " +
-                                      "The cards stay at least 1 mm inside that, so no edge gets cut off.",
+                    $"Fitted to {printer}: it prints edge to edge on {m.Paper.ShortLabel} (borderless), so the cards just stay 1 mm in from the edge.",
+                { Margins: { } x } => $"Fitted to {printer}: on {m.Paper.ShortLabel} paper it prints to within {x.Top:0.0} mm of the top, {x.Bottom:0.0} mm of the bottom, " +
+                                      $"{x.Left:0.0} mm on the left and {x.Right:0.0} mm on the right, and the cards are laid out inside that reach, with 1 mm to spare.",
             };
         }
         catch (Exception ex)

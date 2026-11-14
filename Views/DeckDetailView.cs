@@ -470,6 +470,8 @@ public sealed class FaceTile : Grid
     private readonly SavedCardLine _entry;
     private readonly ScryfallCard? _option;
     private readonly Image _image = new() { Stretch = Stretch.Uniform };
+    private readonly TextBlock _loadingLine;
+    private int _loadCount;
     private readonly ScaleTransform _flipScale = new(1, 1);
     private readonly Border _cardHost;
     private bool _flipped;
@@ -491,11 +493,19 @@ public sealed class FaceTile : Grid
         Cursor = Cursors.Hand;
         ToolTip = $"{entry.Name}\n{entry.PrintingLabel}";
 
+        // While a face is on its way the placeholder says so, under
+        // the card's name: a spinner's worth of honesty, so a slow
+        // image never reads as a broken tile. (Nov 13, 2026.)
+        _loadingLine = new TextBlock { Text = "Loading…", TextAlignment = TextAlignment.Center, FontSize = 12.5,
+            Foreground = Theme.Brush(Theme.Ink, 0.55), Visibility = Visibility.Collapsed, Margin = new Thickness(0, 3, 0, 0) };
+        var placeholderText = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6) };
+        placeholderText.Children.Add(new TextBlock { Text = entry.Name, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, FontSize = 14,
+            Foreground = Theme.Brush(Theme.Ink) });
+        placeholderText.Children.Add(_loadingLine);
         var placeholder = new Border
         {
             CornerRadius = new CornerRadius(8), Background = Theme.Brush(Colors.Black, 0.15),
-            Child = new TextBlock { Text = entry.Name, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, FontSize = 14,
-                Foreground = Theme.Brush(Theme.Ink), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6) },
+            Child = placeholderText,
         };
         var faceGrid = new Grid();
         faceGrid.Children.Add(placeholder);
@@ -583,7 +593,11 @@ public sealed class FaceTile : Grid
             ? (_option?.HasBackFace == true ? _option.FaceImageUrl(1, FaceImageQuality.Normal) : ScryfallClient.CardBackImageUrl)
             : _option?.FaceImageUrl(0, FaceImageQuality.Normal);
         var flippedAtStart = _flipped;
+        var mine = ++_loadCount;
+        _loadingLine.Visibility = url != null ? Visibility.Visible : Visibility.Collapsed;
         var img = await CardImages.GetAsync(url, 488);
+        if (mine != _loadCount) return;
+        _loadingLine.Visibility = Visibility.Collapsed;
         if (flippedAtStart == _flipped) _image.Source = img;
     }
 
