@@ -26,6 +26,13 @@ public abstract class Observable : INotifyPropertyChanged
     protected virtual void OnChanged(string? name) { }
 }
 
+/// The Safe area choice in the print settings: off, or fitted to the
+/// chosen printer's own reach. One choice, where a Canon preset and a
+/// Fit switch used to sit side by side: the preset was the same promise
+/// with the numbers typed in by hand. (Mirrored from the Mac app,
+/// Nov 13, 2026.)
+public enum MarginMode { Off, Fit }
+
 public sealed class PrintJobModel : Observable
 {
     private string _deckText = "";
@@ -120,6 +127,23 @@ public sealed class PrintJobModel : Observable
     public PrinterMargins? FitMargins { get => _fitMargins; set { if (Set(ref _fitMargins, value)) SaveLayout(); } }
     /// What the last read of the driver found, in a sentence.
     public string FitStatus { get => _fitStatus; set => Set(ref _fitStatus, value); }
+    /// Whether the current fit status is a good reading (shown in
+    /// green with a check mark) rather than a warning.
+    public bool FitStatusIsSuccess => FitToPrinter && FitMargins != null;
+    /// The one Safe area choice: Off, or Fit to my printer. Fit turns
+    /// FitToPrinter on; Off turns it off; either way the old Canon
+    /// preset is cleared, since the choice replaces it.
+    public MarginMode MarginChoice
+    {
+        get => FitToPrinter ? MarginMode.Fit : MarginMode.Off;
+        set
+        {
+            if (value == MarginChoice) return;
+            SafeArea = SafeAreaProfile.None;
+            FitToPrinter = value == MarginMode.Fit;
+            Raise();
+        }
+    }
     public IReadOnlyList<string> Printers { get => _printers; set => Set(ref _printers, value); }
     /// The sizes FitPrinter's driver lists, for the paper picker.
     public IReadOnlyList<PaperSize> PrinterSizes { get => _printerSizes; set => Set(ref _printerSizes, value); }
@@ -280,6 +304,7 @@ public sealed class PrintJobModel : Observable
         nameof(ShiftUpText), nameof(ExtraGapText), nameof(IsJpeg), nameof(CanPrint), nameof(ShowPrint),
         nameof(CanEditSettings), nameof(SettingsOpacity), nameof(AutoTone), nameof(PrintOptionsSummary), nameof(CalibrationSummary),
         nameof(PaperChoices), nameof(GridCaption), nameof(PaperSummary), nameof(ShowSafeArea),
+        nameof(MarginChoice), nameof(FitStatusIsSuccess),
         nameof(Mark), nameof(ShowMarkColor), nameof(ShowMarkPosition), nameof(ShowMarkBorder), nameof(MarkBorderText), nameof(MarkSummary),
         nameof(ShowMarkFont),
     ];
@@ -583,7 +608,11 @@ public sealed class LayoutMemory
     public string? PaperLabel { get; set; }
     public double PaperWidthMM { get; set; }
     public double PaperHeightMM { get; set; }
-    public bool FitToPrinter { get; set; }
+    /// On by default (Nov 13, 2026): clipped edges were the app's
+    /// original sin, and every way the driver reading can fail falls
+    /// back to laying out without it. An existing layout.json keeps
+    /// the choice it saved.
+    public bool FitToPrinter { get; set; } = true;
     public string? FitPrinter { get; set; }
     /// Top, bottom, left, right in mm.
     public double[]? FitMargins { get; set; }
