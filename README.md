@@ -1,6 +1,9 @@
+![ProxyPrintGenerator demo](demo.gif)
+
 <p align="right">
   <a href="https://ko-fi.com/kommermail"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support me on Ko-fi" height="30"></a>
 </p>
+﻿
 
 # ProxyPrintGenerator
 
