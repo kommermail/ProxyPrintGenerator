@@ -22,10 +22,11 @@ After that, the app can keep itself up to date. The first time it opens, it asks
 
 - **Scryfall** (`api.scryfall.com` and `cards.scryfall.io`), for card data and images.
 - **GitHub**, only if you turn on automatic update checks or click **Check for updates**. A check asks `api.github.com` for the newest version number, and nothing about you or your decks is sent. The release zip is downloaded from GitHub only when you click **Update now**.
-- **No other website.** The app refuses to download from anywhere else, and every connection is secure (HTTPS). The Ko-fi button and the release notes link open in your web browser, and only when you click them.
+- **No other website.** The app refuses to download from anywhere else, and every connection is secure (HTTPS). The Ko-fi button, the tutorial's Moxfield link and the release notes link open in your web browser, and only when you click them.
 
 ## Features
 
+- **Quick tutorial**: new here? Click the **WOW!** sticker in the Deck Library for five easy steps, from finding a deck on Moxfield to printing it in high quality.
 - **Deck Library**
   - Save decks.
   - Browse every card face: click to flip, double-click to zoom.

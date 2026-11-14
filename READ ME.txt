@@ -15,6 +15,8 @@ RUNNING IT
   Nothing to install; Windows 10 or 11, 64 bit.
 - The first time, Windows SmartScreen may say "Windows protected your PC"
   because the app isn't code signed. Click "More info", then "Run anyway".
+- New here? Click the WOW! sticker at the top of the Deck Library for a
+  quick tutorial, from finding a deck on Moxfield to printing it.
 
 UPDATES
 - The first time you open the app, it asks whether it may check GitHub
@@ -43,7 +45,8 @@ It does not mean anything is wrong with it.
   to GitHub only if you turn on automatic update checks or click "Check
   for updates", and to no other website: it refuses to download from
   anywhere else. Every connection is secure (HTTPS). The Ko-fi button
-  opens in your web browser, and only when you click it.
+  and the tutorial's Moxfield link open in your web browser, and only
+  when you click them.
 - Apart from updating itself when you say so, it doesn't install
   anything, doesn't change any Windows settings, and doesn't collect
   any personal information.

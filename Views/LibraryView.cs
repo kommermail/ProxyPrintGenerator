@@ -21,6 +21,7 @@ public sealed class LibraryView : UserControl
     {
         var stack = new StackPanel();
         stack.Children.Add(new AppMasthead { Section = "Deck Library" });
+        stack.Children.Add(TutorialSheet.Sticker());
 
         var add = new Button { Margin = new Thickness(20, 10, 20, 10) };
         add.SetResourceReference(StyleProperty, "PlaqueButton");
