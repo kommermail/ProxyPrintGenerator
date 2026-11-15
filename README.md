@@ -51,7 +51,7 @@ After that, the app can keep itself up to date. The first time it opens, it asks
   - Choose the printer, copies and page range.
   - Back to back builds print as two jobs: the one sided pages, then the double sided pages, flipped by the printer or by hand.
   - The driver's own quality and paper type lists, plus your printer's full Preferences window.
-  - One-click paper presets: Plain, Canon Matte Photo, Photo Paper Plus Glossy II, and Glossy.
+  - Paper dropdown listing every paper your printer driver offers (Pro Luster, Matte Photo, Glossy II, ...); picking one also sets High quality and top resolution.
   - Tells your printer the paper size the pages were built for, and warns if it doesn't take that paper or can't reach a card edge.
 - **Formats**
   - PDF: each unique face is stored once.
