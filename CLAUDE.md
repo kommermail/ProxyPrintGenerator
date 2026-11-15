@@ -19,7 +19,7 @@ Both computers have a git clone of `github.com/kommermail/ProxyPrintGenerator`. 
 3. **Never** upload files or edit the version through GitHub's website. The other computer won't know about it, and the next pull stops with "Your local changes would be overwritten".
 
 Where the clones are:
-- **Mac:** `~/development/proxyprintgenerator/ProxyPrintGenerator-github`. The old Xcode folder next to it (`~/development/proxyprintgenerator/ProxyPrintGenerator`) is an earlier, unconnected copy; don't work there.
+- **Mac:** `~/development/proxyprintgenerator/ProxyPrintGenerator-github`. The old Xcode folder next to it (`~/development/proxyprintgenerator/ProxyPrintGenerator-OLD-not-connected`) is an earlier, unconnected copy, kept only as a backup; don't work there.
 - **PC:** the folder `publish.ps1` is run from.
 
 If `git pull` stops because of local changes, don't discard them: `git stash push --include-untracked -m "why"`, pull, then look at what was set aside (`git stash list`) before dropping anything. A stash can be turned into a branch to push and merge: `git stash branch some-name 'stash@{0}'`.
