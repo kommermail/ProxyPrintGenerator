@@ -45,7 +45,10 @@ It does not mean anything is wrong with it.
   to GitHub only if you turn on automatic update checks or click "Check
   for updates", and to your printer maker's download server only when
   you click "Get the driver for me" in the print window, for a driver
-  listed in the app's GitHub repository. It connects to no other
+  listed in the app's GitHub repository. For other printers the maker's
+  page opens in your web browser and you download the driver there.
+  The app only runs an installer that Windows trusts and that is signed
+  by a printer maker, and only when you click Run it. It connects to no other
   website: it refuses to download from anywhere else. Every connection is secure (HTTPS). The Ko-fi button
   and the tutorial's Moxfield link open in your web browser, and only
   when you click them.

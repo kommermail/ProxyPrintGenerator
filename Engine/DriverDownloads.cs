@@ -32,6 +32,8 @@ using System.Text.Json.Serialization;
 
 namespace ProxyPrintGenerator.Engine;
 
+public sealed record PrinterMaker(string Name, string[] Aliases, string[] Publishers, string[] Hosts, string? DriverPage);
+
 /// One driver from drivers.json.
 public sealed class DriverPackage
 {
@@ -51,16 +53,38 @@ public static class DriverDownloads
 {
     public const string ManifestUrl = "https://raw.githubusercontent.com/kommermail/ProxyPrintGenerator/main/drivers.json";
 
-    /// Each maker's download servers and code signing publisher, written
-    /// into the app so the list on GitHub can't point anywhere else.
-    public static readonly IReadOnlyDictionary<string, (string[] Hosts, string Publisher)> Makers =
-        new Dictionary<string, (string[], string)>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["Canon"] = (["gdlp01.c-wss.com"], "Canon Inc."),
-            ["Epson"] = (["ftp.epson.com", "download.ebz.epson.net", "download3.ebz.epson.net"], "Seiko Epson Corporation"),
-            ["Brother"] = (["download.brother.com"], "Brother Industries, Ltd."),
-            ["HP"] = (["ftp.hp.com", "ftp.ext.hp.com"], "HP Inc."),
-        };
+    /// The printer makers the app recognizes, written into the app: the
+    /// names a printer may go by, the publisher names on their Windows
+    /// code signing certificates, their download servers (for drivers.json
+    /// entries) and their driver page (opened in the web browser).
+    /// An installer counts as a real printer maker's only when Windows
+    /// trusts its signature and the certificate names one of these
+    /// publishers; certificate authorities verify that name before they
+    /// issue the certificate, so nobody else can carry it.
+    public static readonly PrinterMaker[] PrinterMakers =
+    [
+        new("Canon", ["Canon"], ["Canon Inc."], ["gdlp01.c-wss.com"], "https://www.usa.canon.com/support/software-and-drivers"),
+        new("Epson", ["Epson", "Seiko Epson"], ["Seiko Epson Corporation"], ["ftp.epson.com", "download.ebz.epson.net", "download3.ebz.epson.net"], "https://epson.com/Support/sl/s"),
+        new("HP", ["HP", "Hewlett-Packard", "Hewlett Packard", "Samsung"], ["HP Inc.", "HP Inc", "Hewlett-Packard Company", "Hewlett Packard Enterprise Company"], ["ftp.hp.com", "ftp.ext.hp.com"], "https://support.hp.com/drivers"),
+        new("Brother", ["Brother"], ["Brother Industries, Ltd.", "Brother Industries Ltd."], ["download.brother.com"], "https://support.brother.com/g/b/productsearch.aspx"),
+        new("Xerox", ["Xerox", "Fuji Xerox", "FUJIFILM"], ["Xerox Corporation", "FUJIFILM Business Innovation Corp."], [], "https://www.support.xerox.com"),
+        new("Lexmark", ["Lexmark"], ["Lexmark International, Inc.", "Lexmark International Inc."], [], "https://support.lexmark.com"),
+        new("Kyocera", ["Kyocera"], ["KYOCERA Document Solutions Inc."], [], "https://www.kyoceradocumentsolutions.com/download/"),
+        new("Ricoh", ["Ricoh"], ["Ricoh Company, Ltd.", "RICOH COMPANY, LTD."], [], "https://support.ricoh.com"),
+        new("Sharp", ["Sharp"], ["Sharp Corporation"], [], "https://global.sharp/business/print/"),
+        new("Konica Minolta", ["Konica", "Konica Minolta"], ["Konica Minolta, Inc.", "KONICA MINOLTA, INC."], [], "https://www.konicaminolta.com/global-en/support/"),
+        new("OKI", ["OKI"], ["Oki Electric Industry Co., Ltd.", "OKI Data Corporation"], [], "https://www.oki.com/printing/support/"),
+        new("Pantum", ["Pantum"], ["Zhuhai Pantum Electronics Co., Ltd."], [], "https://global.pantum.com/support/"),
+    ];
+
+    /// The maker a printer or model name belongs to ("HP DeskJet 2800"
+    /// is HP), or null.
+    public static PrinterMaker? MakerFor(string name)
+    {
+        var n = name.Trim();
+        return PrinterMakers.FirstOrDefault(m => m.Aliases.Any(a =>
+            n.StartsWith(a + " ", StringComparison.OrdinalIgnoreCase) || n.Equals(a, StringComparison.OrdinalIgnoreCase)));
+    }
 
     private const long MaxManifestBytes = 512 * 1024;
     private const long MaxInstallerBytes = 1024L * 1024 * 1024;
@@ -91,7 +115,7 @@ public static class DriverDownloads
     /// An entry the app may use: a known maker, an HTTPS address on that
     /// maker's server, a sane size and a full checksum.
     public static bool Valid(DriverPackage d) =>
-        Makers.TryGetValue(d.Maker, out var maker)
+        MakerFor(d.Maker) is { } maker
         && Uri.TryCreate(d.Url, UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps
         && maker.Hosts.Contains(u.IdnHost, StringComparer.OrdinalIgnoreCase)
         && d.Size is > 0 and <= MaxInstallerBytes
@@ -111,7 +135,8 @@ public static class DriverDownloads
     public static async Task<string> DownloadAsync(DriverPackage d, IProgress<(long Done, long Total)>? progress, CancellationToken ct)
     {
         if (!Valid(d)) throw new PpgException("That driver entry didn't pass the app's checks, so nothing was downloaded.");
-        var hosts = Makers[d.Maker].Hosts;
+        var maker = MakerFor(d.Maker)!;
+        var hosts = maker.Hosts;
         Directory.CreateDirectory(WorkFolder);
         var ext = Path.GetExtension(new Uri(d.Url).AbsolutePath).ToLowerInvariant();
         var path = Path.Combine(WorkFolder, $"{d.Sha256[..16]}{ext}");
@@ -140,9 +165,8 @@ public static class DriverDownloads
                 if (!Convert.ToHexString(sha.GetHashAndReset()).Equals(d.Sha256, StringComparison.OrdinalIgnoreCase))
                     throw new PpgException("The download doesn't match the checksum in the driver list, so it wasn't used.");
             }
-            var publisher = Makers[d.Maker].Publisher;
-            if (!SignedBy(path, publisher))
-                throw new PpgException($"The installer isn't signed by {publisher}, so it wasn't run.");
+            if (SignedByMaker(path) != maker)
+                throw new PpgException($"The installer isn't signed by {maker.Name}, so it wasn't run.");
             return path;
         }
         catch
@@ -154,10 +178,10 @@ public static class DriverDownloads
 
     /// Runs the maker's installer and waits for it. Windows shows its own
     /// administrator prompt; the installer then does its own setup.
-    public static async Task<int> RunInstallerAsync(string path, string publisher)
+    public static async Task<int> RunInstallerAsync(string path, PrinterMaker maker)
     {
         // Checked again right before it runs.
-        if (!SignedBy(path, publisher)) throw new PpgException($"The installer isn't signed by {publisher}, so it wasn't run.");
+        if (SignedByMaker(path) != maker) throw new PpgException($"The installer isn't signed by {maker.Name}, so it wasn't run.");
         var start = Path.GetExtension(path).Equals(".msi", StringComparison.OrdinalIgnoreCase)
             ? new ProcessStartInfo("msiexec.exe") { UseShellExecute = true, ArgumentList = { "/i", path } }
             : new ProcessStartInfo(path) { UseShellExecute = true };
@@ -177,24 +201,34 @@ public static class DriverDownloads
 
     // MARK: - Code signature
 
-    /// A valid Authenticode signature, trusted by Windows, whose signing
-    /// certificate names this publisher (its organization or common name).
-    public static bool SignedBy(string path, string publisher)
+    /// The printer maker whose valid, Windows-trusted Authenticode
+    /// signature the file carries, or null: the signing certificate's
+    /// organization (or common name) must be one of a maker's publishers.
+    public static PrinterMaker? SignedByMaker(string path)
     {
-        if (!VerifyTrust(path)) return false;
+        var publisher = TrustedPublisher(path);
+        if (publisher == null) return null;
+        static string Norm(string s) => s.Trim().TrimEnd('.').Replace(",", "").ToUpperInvariant();
+        return PrinterMakers.FirstOrDefault(m => m.Publishers.Any(p => Norm(p) == Norm(publisher)));
+    }
+
+    /// Who signed the file, when Windows trusts the signature: the
+    /// certificate's organization, else its common name. Null when the
+    /// file is unsigned, altered, or signed by an untrusted certificate.
+    public static string? TrustedPublisher(string path)
+    {
+        if (!VerifyTrust(path)) return null;
         try
         {
 #pragma warning disable SYSLIB0057
             using var cert = new X509Certificate2(X509Certificate.CreateFromSignedFile(path));
 #pragma warning restore SYSLIB0057
-            var cn = cert.GetNameInfo(X509NameType.SimpleName, false);
             var org = cert.SubjectName.EnumerateRelativeDistinguishedNames()
                 .Where(r => r.GetSingleElementType().FriendlyName == "O")
                 .Select(r => r.GetSingleElementValue()).FirstOrDefault();
-            return string.Equals(org, publisher, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(cn, publisher, StringComparison.OrdinalIgnoreCase);
+            return org ?? cert.GetNameInfo(X509NameType.SimpleName, false);
         }
-        catch { return false; }
+        catch { return null; }
     }
 
     private static bool VerifyTrust(string path)

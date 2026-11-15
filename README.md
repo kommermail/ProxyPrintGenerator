@@ -22,7 +22,7 @@ After that, the app can keep itself up to date. The first time it opens, it asks
 
 - **Scryfall** (`api.scryfall.com` and `cards.scryfall.io`), for card data and images.
 - **GitHub**, only if you turn on automatic update checks or click **Check for updates**. A check asks `api.github.com` for the newest version number, and nothing about you or your decks is sent. The release zip is downloaded from GitHub only when you click **Update now**.
-- **Your printer maker's download server** (Windows), only when you click **Get the driver for me** in the print window. The app first reads [`drivers.json`](drivers.json) from this repository on GitHub, which names the exact installer, and downloads it only from that maker's own server (Canon, Epson, Brother or HP). It runs the installer only if the file matches the checksum in that list and is signed by the maker, and Windows asks for your permission first.
+- **Your printer maker's download server** (Windows), only when you click **Get the driver for me** in the print window, and only for a driver listed in [`drivers.json`](drivers.json) in this repository, which the app reads from GitHub on that click. A listed installer is downloaded only from that maker's own server and must match the list's checksum. For any other printer, the maker's driver page opens in your web browser and you download the driver there; the app then finds it in your Downloads folder. Either way, it runs an installer only if Windows trusts its signature and the signature belongs to a printer maker (Canon, Epson, HP, Brother, Xerox, Lexmark, Kyocera, Ricoh, Sharp, Konica Minolta, OKI or Pantum), and only when you click Run it, after Windows asks for your permission.
 - **No other website.** The app refuses to download from anywhere else, and every connection is secure (HTTPS). The Ko-fi button, the tutorial's Moxfield link and the release notes link open in your web browser, and only when you click them.
 
 ## Features
@@ -54,7 +54,7 @@ After that, the app can keep itself up to date. The first time it opens, it asks
   - The driver's own quality and paper type lists, plus your printer's full Preferences window.
   - One-click paper presets: Plain, Canon Matte Photo, Photo Paper Plus Glossy II, and Glossy.
   - Tells your printer the paper size the pages were built for, and warns if it doesn't take that paper or can't reach a card edge.
-  - Spots a printer that's offline, paused or jammed, and one using Windows' generic driver when its maker's driver would offer the exact paper types. **Get the driver for me** downloads and checks the maker's installer, **Set it up for me** adds the printer with that driver, and a short, skippable **printer setup guide** covers the rest.
+  - Spots a printer that's offline, paused or jammed, and one using Windows' generic driver when its maker's driver would offer the exact paper types. **Get the driver for me** fetches the maker's installer and checks it's really signed by the maker, **Set it up for me** adds the printer with that driver, and a short, skippable **printer setup guide** covers the rest.
 - **Formats**
   - PDF: each unique face is stored once.
   - PNG: one tall image, verified after writing.

@@ -8,6 +8,7 @@
 //     short step at a time, every step skippable, and the whole guide
 //     too. Mirrored from the Mac app, Nov 15, 2026.
 
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -26,32 +27,214 @@ public static class PrinterSetup
     /// or null when the person cancelled. Throws on a failure.
     public static async Task<string?> GetDriverAsync(PrinterStatus p, Action<string> say)
     {
-        say("Looking for the driver on the app's driver list (GitHub)…");
-        var pkg = await DriverDownloads.FindAsync(p.Model, CancellationToken.None);
-        if (pkg == null)
-        {
-            var page = PrinterDrivers.MakerDriverPage(p.Maker);
-            return $"{p.Model} isn't on the app's driver list yet. Show me how walks you through getting it from {p.Maker}"
-                   + (page != null ? "'s website." : ".");
-        }
-        var publisher = DriverDownloads.Makers[pkg.Maker].Publisher;
-        var mb = pkg.Size / 1048576.0;
-        if (!await ConfirmAsync("Get the driver?",
-                $"Download {(pkg.Title.Length > 0 ? pkg.Title : pkg.Driver)} ({mb:0} MB) from {pkg.Maker}'s server ({pkg.Host}) and run its installer?",
-                $"Before anything runs, the app checks the file is exactly the one on its driver list and is signed by {publisher}. " +
-                "Windows then asks for permission to install it. Follow the installer's steps; if it offers to connect your printer, say yes.",
-                "Download and install"))
-            return null;
+        var maker = DriverDownloads.MakerFor(p.Model) ?? DriverDownloads.MakerFor(p.Maker);
 
-        say("Downloading…");
-        var progress = new Progress<(long Done, long Total)>(x =>
-            say($"Downloading {pkg.Maker}'s driver: {x.Done / 1048576.0:0} of {x.Total / 1048576.0:0} MB"));
-        var path = await DriverDownloads.DownloadAsync(pkg, progress, CancellationToken.None);
-        say($"Checked: signed by {publisher}. Running the installer; Windows will ask for permission…");
-        try { await DriverDownloads.RunInstallerAsync(path, publisher); }
-        finally { DriverDownloads.CleanUp(); }
-        return $"{pkg.Maker}'s installer finished.";
+        // A driver on the app's list downloads by itself.
+        DriverPackage? pkg = null;
+        try
+        {
+            say("Checking the app's driver list (GitHub)…");
+            pkg = await DriverDownloads.FindAsync(p.Model, CancellationToken.None);
+        }
+        catch { /* offline, or GitHub is down: the person fetches it instead */ }
+        if (pkg != null && DriverDownloads.MakerFor(pkg.Maker) is { } listed)
+        {
+            var mb = pkg.Size / 1048576.0;
+            if (!await ConfirmAsync("Get the driver?",
+                    $"Download {(pkg.Title.Length > 0 ? pkg.Title : pkg.Driver)} ({mb:0} MB) from {listed.Name}'s server ({pkg.Host}) and run its installer?",
+                    $"Before anything runs, the app checks the file is exactly the one on its driver list and is signed by {listed.Name}. " +
+                    "Windows then asks for permission to install it. Follow the installer's steps; if it offers to connect your printer, say yes.",
+                    "Download and install"))
+                return null;
+            var progress = new Progress<(long Done, long Total)>(x =>
+                say($"Downloading {listed.Name}'s driver: {x.Done / 1048576.0:0} of {x.Total / 1048576.0:0} MB"));
+            var path = await DriverDownloads.DownloadAsync(pkg, progress, CancellationToken.None);
+            say($"Checked: signed by {listed.Name}. Running the installer; Windows will ask for permission…");
+            try { await DriverDownloads.RunInstallerAsync(path, listed); }
+            finally { DriverDownloads.CleanUp(); }
+            return $"{listed.Name}'s installer finished.";
+        }
+
+        // Any other printer: the person downloads it from the maker's own
+        // page in their browser, and the app finds it in Downloads and
+        // checks it's really signed by a printer maker before running it.
+        say("");
+        var file = await WaitForInstallerAsync(p, maker);
+        if (file == null) return null;
+        var signer = DriverDownloads.SignedByMaker(file)
+                     ?? throw new PpgException("That file isn't signed by a printer maker, so it wasn't run.");
+        say($"Checked: signed by {signer.Name}. Running the installer; Windows will ask for permission…");
+        await DriverDownloads.RunInstallerAsync(file, signer);
+        return $"{signer.Name}'s installer finished.";
     }
+
+    /// The installer the person downloads: opens the maker's driver page,
+    /// watches the Downloads folder, and takes the first new .exe or .msi
+    /// that Windows trusts and that is signed by this printer's maker (or
+    /// by any printer maker the app knows, when the printer's maker isn't
+    /// one of them). "Choose the file myself" covers a download saved
+    /// elsewhere. Nothing runs until the person clicks Run it. Null when
+    /// they cancel.
+    public static Task<string?> WaitForInstallerAsync(PrinterStatus p, PrinterMaker? maker)
+    {
+        var result = new TaskCompletionSource<string?>();
+        var makerName = maker?.Name ?? (p.Maker.Length > 0 ? p.Maker : "your printer maker");
+        var downloads = DownloadsFolder();
+        var opened = DateTime.Now.AddHours(-3);
+
+        var body = new StackPanel();
+        body.Children.Add(Line($"1.  On **{makerName}'s** driver page, search **{SearchName(p.Model, makerName)}**, pick **Windows**, and download the **printer driver** (the full driver, not an app from the Microsoft Store)."));
+        body.Children.Add(Line("2.  Leave this window open. When the download lands in your **Downloads** folder, the app checks it's really signed by the printer maker and offers to run it."));
+        var openPage = SheetParts.Leather(maker?.DriverPage != null ? $"Open {makerName}'s driver page" : "Search the web for the driver", 16);
+        var pick = SheetParts.Leather("Choose the file myself…", 16);
+        openPage.Margin = pick.Margin = new Thickness(0, 10, 10, 0);
+        var row = new WrapPanel();
+        row.Children.Add(openPage);
+        row.Children.Add(pick);
+        body.Children.Add(row);
+        var state = SheetParts.Note("Waiting for the download…", 16, 1);
+        state.Margin = new Thickness(0, 14, 0, 0);
+        body.Children.Add(state);
+        var run = SheetParts.Gold("Run it", 19);
+        run.IsEnabled = false;
+        var cancel = SheetParts.Leather("Cancel", 17);
+        cancel.Margin = new Thickness(12, 0, 0, 0);
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0) };
+        buttons.Children.Add(run);
+        buttons.Children.Add(cancel);
+        body.Children.Add(buttons);
+
+        string? found = null;
+        FileSystemWatcher? watcher = null;
+        var checking = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        void Stop() { watcher?.Dispose(); watcher = null; }
+
+        var close = MainWindow.Instance.ShowSheet($"Get {makerName}'s driver", body, 700, compact: true,
+            canClose: () => { Stop(); result.TrySetResult(null); return true; });
+
+        // Is this file the one? Waits for the browser to finish writing
+        // it, then checks the signature off the UI thread.
+        async Task Consider(string path, bool fromPicker)
+        {
+            var ext = Path.GetExtension(path).ToLowerInvariant();
+            if (found != null || ext is not (".exe" or ".msi") || !checking.Add(path)) return;
+            try
+            {
+                long last = -1;
+                for (var i = 0; i < 120; i++)
+                {
+                    var len = File.Exists(path) ? new FileInfo(path).Length : -1;
+                    if (len > 0 && len == last && CanOpen(path)) break;
+                    last = len;
+                    await Task.Delay(750);
+                }
+                if (new FileInfo(path).Length > 1024L * 1024 * 1024) return;
+                var signer = await Task.Run(() => DriverDownloads.SignedByMaker(path));
+                var name = Path.GetFileName(path);
+                if (signer == null)
+                {
+                    var who = await Task.Run(() => DriverDownloads.TrustedPublisher(path));
+                    if (fromPicker)
+                        state.Text = who == null
+                            ? $"{name} isn't signed, or its signature isn't valid, so the app won't run it."
+                            : $"{name} is signed by {who}, which isn't a printer maker the app knows, so it won't run it.";
+                    return;
+                }
+                if (maker != null && signer != maker)
+                {
+                    state.Text = $"{name} is {signer.Name}'s, but this printer is {maker.Name}. Download {maker.Name}'s driver instead.";
+                    return;
+                }
+                found = path;
+                Stop();
+                state.Text = $"Found {name}: signed by {signer.Name}, checked. Click Run it; Windows will ask for permission, then follow the installer's steps. If it offers to connect your printer, say yes.";
+                run.IsEnabled = true;
+            }
+            catch { /* a file that vanished or can't be read is passed over */ }
+            finally { if (found != path) checking.Remove(path); }
+        }
+
+        // Already downloaded in the last few hours? Offer it straight away.
+        void ScanRecent()
+        {
+            if (downloads == null) return;
+            try
+            {
+                foreach (var f in new DirectoryInfo(downloads).EnumerateFiles()
+                             .Where(f => f.LastWriteTime > opened && f.Extension.ToLowerInvariant() is ".exe" or ".msi")
+                             .OrderByDescending(f => f.LastWriteTime).Take(10))
+                    _ = Consider(f.FullName, false);
+            }
+            catch { }
+        }
+
+        if (downloads != null)
+        {
+            try
+            {
+                watcher = new FileSystemWatcher(downloads) { IncludeSubdirectories = false, EnableRaisingEvents = true };
+                void OnFile(string path) => body.Dispatcher.BeginInvoke(() => _ = Consider(path, false));
+                watcher.Created += (_, e) => OnFile(e.FullPath);
+                watcher.Renamed += (_, e) => OnFile(e.FullPath);
+                watcher.Changed += (_, e) => OnFile(e.FullPath);
+            }
+            catch { watcher = null; }
+        }
+        ScanRecent();
+
+        openPage.Click += (_, _) => PrinterDrivers.OpenUrl(maker?.DriverPage
+            ?? "https://www.bing.com/search?q=" + Uri.EscapeDataString($"{p.Model} Windows printer driver download"));
+        pick.Click += (_, _) =>
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "Choose the printer driver installer", Filter = "Installers (*.exe;*.msi)|*.exe;*.msi",
+                InitialDirectory = downloads ?? "",
+            };
+            if (dialog.ShowDialog(MainWindow.Instance) == true)
+            {
+                state.Text = "Checking the file's signature…";
+                _ = Consider(dialog.FileName, true);
+            }
+        };
+        run.Click += (_, _) =>
+        {
+            var path = found;
+            Stop();
+            result.TrySetResult(path);
+            close();
+        };
+        cancel.Click += (_, _) => close();
+        if (maker?.DriverPage != null) PrinterDrivers.OpenUrl(maker.DriverPage);
+        return result.Task;
+    }
+
+    private static bool CanOpen(string path)
+    {
+        try { using var f = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read); return true; }
+        catch { return false; }
+    }
+
+    /// The person's Downloads folder (wherever they've moved it).
+    private static string? DownloadsFolder()
+    {
+        try
+        {
+            var id = new Guid("374DE290-123F-4565-9164-39C4925E467B");
+            if (SHGetKnownFolderPath(ref id, 0, IntPtr.Zero, out var ptr) == 0)
+            {
+                var path = System.Runtime.InteropServices.Marshal.PtrToStringUni(ptr);
+                System.Runtime.InteropServices.Marshal.FreeCoTaskMem(ptr);
+                if (Directory.Exists(path)) return path;
+            }
+        }
+        catch { }
+        var fallback = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+        return Directory.Exists(fallback) ? fallback : null;
+    }
+
+    [System.Runtime.InteropServices.DllImport("shell32.dll")]
+    private static extern int SHGetKnownFolderPath(ref Guid rfid, uint dwFlags, IntPtr hToken, out IntPtr ppszPath);
 
     // MARK: - Set it up for me
 
@@ -187,9 +370,9 @@ public static class PrinterSetup
                     content.Children.Add(Action("Open Printers & scanners", () => { PrinterDrivers.OpenPrinterSettings(); return Task.CompletedTask; }));
                     break;
                 case 1:
-                    Bullet($"**Get the driver for me** downloads {maker}'s own installer, checks it's the exact file on the app's list and signed by {maker}, and runs it. Windows asks for permission first.");
+                    Bullet($"**Get the driver for me** opens {maker}'s driver page; download the Windows printer driver there. The app spots it in your Downloads folder, checks it's really signed by {maker}, and runs it when you say so. Windows asks for permission first.");
                     content.Children.Add(Action("Get the driver for me", async () => { await getDriver(); await Recheck(); }, gold: true));
-                    Bullet($"Rather get it yourself? On {maker}'s support site, search **{SearchName(model, maker)}**, pick **Windows**, and download the printer driver (Canon calls it the **MP Drivers** or **Printer Driver**).");
+                    Bullet($"On {maker}'s site, search **{SearchName(model, maker)}**, pick **Windows**, and download the full printer driver (Canon calls it the **MP Drivers**; HP calls it the **Full Feature Software and Drivers**). Skip apps from the Microsoft Store.");
                     if (PrinterDrivers.MakerDriverPage(maker) is { } page)
                         content.Children.Add(Action($"Open {maker}'s driver page", () => { PrinterDrivers.OpenUrl(page); return Task.CompletedTask; }));
                     break;

@@ -170,14 +170,7 @@ public static partial class PrinterDrivers
     }
 
     /// The maker's driver download page, opened in the web browser.
-    public static string? MakerDriverPage(string maker) => maker.ToLowerInvariant() switch
-    {
-        var m when m.Contains("canon") => "https://www.usa.canon.com/support/software-and-drivers",
-        var m when m.Contains("epson") => "https://epson.com/Support/sl/s",
-        var m when m.Contains("brother") => "https://support.brother.com/g/b/productsearch.aspx",
-        var m when m.StartsWith("hp") => "https://support.hp.com/drivers",
-        _ => null,
-    };
+    public static string? MakerDriverPage(string maker) => DriverDownloads.MakerFor(maker)?.DriverPage;
 
     public static void OpenUrl(string url)
     {

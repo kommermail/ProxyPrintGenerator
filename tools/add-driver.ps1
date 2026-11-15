@@ -1,4 +1,9 @@
 # add-driver.ps1
+# Developer tool: the app's users never run this. Every printer works
+# without a list entry (the app opens the maker's page, finds the
+# download in the Downloads folder and checks the maker's signature);
+# an entry only makes "Get the driver for me" download by itself.
+#
 # Adds a printer driver to drivers.json, the list the Windows app's
 # "Get the driver for me" button may download from. Run it on Windows:
 #
@@ -18,7 +23,7 @@
 # it defaults to the first model name.
 
 param(
-    [Parameter(Mandatory)] [ValidateSet('Canon', 'Epson', 'Brother', 'HP')] [string] $Maker,
+    [Parameter(Mandatory)] [ValidateSet('Canon', 'Epson', 'Brother', 'HP')] [string] $Maker,  # makers with download servers in DriverDownloads.PrinterMakers
     [Parameter(Mandatory)] [string[]] $Models,
     [Parameter(Mandatory)] [string] $Url,
     [string] $Driver = '',
