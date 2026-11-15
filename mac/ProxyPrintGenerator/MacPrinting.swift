@@ -812,7 +812,7 @@ nonisolated enum MacPrinting {
             // driver lists it: the job that printed A4 plain before.
             let luster = p.mediaType?.choices.contains { $0.value == "63" } == true
             let job = jobSettings(printer: p, pageSize: CGSize(width: 612, height: 792),
-                                  copies: 2, pages: 1...1,
+                                  copies: 2, pages: nil,
                                   media: luster ? "63" : preset?.media,
                                   quality: luster ? bestQuality(p.quality) : preset?.quality,
                                   duplex: false)
@@ -865,13 +865,17 @@ nonisolated enum MacPrinting {
         defer { PMRelease(PMObject(settings)) }
         PMSessionDefaultPrintSettings(session, settings)
         PMPrintSettingsSetJobName(settings, title as CFString)
-        PMSetCopies(settings, UInt32(max(1, job.copies)), false)
+        PMSetCopies(settings, UInt32(clamping: max(1, job.copies)), false)
         if let pages = job.pages {
-            PMSetFirstPage(settings, UInt32(pages.lowerBound), false)
-            PMSetLastPage(settings, UInt32(pages.upperBound), false)
+            PMSetFirstPage(settings, UInt32(clamping: max(1, pages.lowerBound)), false)
+            PMSetLastPage(settings, UInt32(clamping: max(1, pages.upperBound)), false)
         } else {
             PMSetFirstPage(settings, 1, false)
-            PMSetLastPage(settings, UInt32(kPMPrintAllPages), false)
+            // kPMPrintAllPages is -1, which Core Printing reads as the
+            // largest page number. Converted with UInt32(...) it crashed
+            // every all-pages print (1.64.2 build, Nov 15, 2026); this keeps
+            // its bits, as C does.
+            PMSetLastPage(settings, UInt32(truncatingIfNeeded: kPMPrintAllPages), false)
         }
         PMSetDuplex(settings, PMDuplexMode(job.duplex ? kPMDuplexNoTumble : kPMDuplexNone))
         // The driver's own options go on the ticket under their keywords,
