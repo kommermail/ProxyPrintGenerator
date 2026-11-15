@@ -52,7 +52,7 @@ After that, the app can keep itself up to date. The first time it opens, it asks
   - Choose the printer, copies and page range.
   - Back to back builds print as two jobs: the one sided pages, then the double sided pages, flipped by the printer or by hand.
   - The driver's own quality and paper type lists, plus your printer's full Preferences window.
-  - One-click paper presets: Plain, Canon Matte Photo, Photo Paper Plus Glossy II, and Glossy.
+  - Paper dropdown listing every paper your printer driver offers (Pro Luster, Matte Photo, Glossy II, ...); picking one also sets High quality and top resolution.
   - Tells your printer the paper size the pages were built for, and warns if it doesn't take that paper or can't reach a card edge.
   - Spots a printer that's offline, paused or jammed, and one using Windows' generic driver when its maker's driver would offer the exact paper types. **Get the driver for me** fetches the maker's installer and checks it's really signed by the maker, **Set it up for me** adds the printer with that driver, and a short, skippable **printer setup guide** covers the rest.
 - **Formats**

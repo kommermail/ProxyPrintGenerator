@@ -154,7 +154,7 @@ public static partial class PrinterDrivers
         if (p.Kind != DriverKind.Generic) return list;
         if (ProtectedPrintMode())
         {
-            list.Add(new("wpp", $"{name} uses Windows' own printer driver, and Windows protected print mode is on, which only allows that driver. It prints fine; the paper buttons work with what it offers.", false, null, AdviceAction.None));
+            list.Add(new("wpp", $"{name} uses Windows' own printer driver, and Windows protected print mode is on, which only allows that driver. It prints fine; the Paper list shows what it offers.", false, null, AdviceAction.None));
             return list;
         }
         if (p.MakerDriverTwin is { } twin)

@@ -402,7 +402,7 @@ public static class PrinterSetup
                     break;
                 default:
                     Bullet($"In the print window, pick the printer that uses {maker}'s driver.");
-                    Bullet("Click a paper button, like **Matte photo**, to match the paper in the tray. It sets the best quality too.");
+                    Bullet("Pick the paper in the tray from the **Paper** list, like **Matte Photo Paper**. It sets the best quality too.");
                     Bullet("Click **Print**. Cards always print at actual size.");
                     break;
             }

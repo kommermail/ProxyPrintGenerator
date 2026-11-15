@@ -117,23 +117,39 @@ public static class DriverTicket
 }
 
 /// One click paper setup: the paper type, High quality, the build's paper size, and the
-/// printer's top resolution, matched against what the driver offers.
+/// printer's top resolution. There is one per paper the driver lists, under the driver's
+/// own name, so any paper the printer knows (Pro Luster included) can be picked.
 public sealed record PaperPreset(string Label, string MediaOption, string QualityOption, string Hint)
 {
-    private static readonly (string Label, Func<DriverOption, bool> Match, string Fallback, string Hint)[] Wanted =
+    /// Tips for papers we know, matched against the driver's paper.
+    private static readonly (Func<DriverOption, bool> Match, string Hint)[] Hints =
     [
-        ("Plain", o => o.Name == "psk:Plain", "psk:Plain",
-            "Plain paper at High quality: fine for test sheets and playtest proxies."),
-        ("Matte Photo", o => o.Display.Contains("Matte Photo", StringComparison.OrdinalIgnoreCase), "psk:PhotographicMatte",
+        (o => o.Name == "psk:Plain",
+            "Plain paper: fine for test sheets and playtest proxies. Don't use it for photo paper: it lays down too much ink and smears."),
+        (o => o.Display.Contains("Luster", StringComparison.OrdinalIgnoreCase),
+            "Canon Photo Paper Pro Luster: print on the smooth, bright white side (not the side with the logo). Let prints dry 10+ minutes before cutting or stacking."),
+        (o => o.Display.Contains("Matte Photo", StringComparison.OrdinalIgnoreCase),
             "Canon Matte Photo Paper: ink tuned for matte, no glare, and it takes a sleeve well. Print side is the brighter white side."),
-        ("Glossy II", o => o.Display.Contains("Plus Glossy II", StringComparison.OrdinalIgnoreCase), "psk:PhotographicHighGloss",
+        (o => o.Display.Contains("Plus Glossy II", StringComparison.OrdinalIgnoreCase),
             "Canon Photo Paper Plus Glossy II: the richest color and deepest blacks. Let prints dry a few minutes before cutting."),
-        ("Glossy", o => o.Display.Trim().StartsWith("Glossy Photo Paper", StringComparison.OrdinalIgnoreCase)
-                        || o.Name.EndsWith(":GlossyPaperStandard", StringComparison.OrdinalIgnoreCase), "psk:PhotographicGlossy",
+        (o => o.Display.Contains("Semi-gloss", StringComparison.OrdinalIgnoreCase) || o.Display.Contains("Semi-Gloss", StringComparison.OrdinalIgnoreCase),
+            "Semi-gloss photo paper: print on the shiny side. Let prints dry a few minutes before cutting."),
+        (o => o.Display.Trim().StartsWith("Glossy Photo Paper", StringComparison.OrdinalIgnoreCase)
+              || o.Name.EndsWith(":GlossyPaperStandard", StringComparison.OrdinalIgnoreCase),
             "Canon Glossy Photo Paper (everyday use). Let prints dry a few minutes before cutting."),
     ];
 
-    /// The presets this printer can honor, by its own paper names.
+    /// Names the old one-click buttons saved, so a remembered choice still opens.
+    private static readonly (string Label, Func<DriverOption, bool> Match)[] Legacy =
+    [
+        ("Plain", o => o.Name == "psk:Plain"),
+        ("Matte Photo", o => o.Display.Contains("Matte Photo", StringComparison.OrdinalIgnoreCase)),
+        ("Glossy II", o => o.Display.Contains("Plus Glossy II", StringComparison.OrdinalIgnoreCase)),
+        ("Glossy", o => o.Display.Trim().StartsWith("Glossy Photo Paper", StringComparison.OrdinalIgnoreCase)
+                        || o.Name.EndsWith(":GlossyPaperStandard", StringComparison.OrdinalIgnoreCase)),
+    ];
+
+    /// One preset per paper this printer's driver lists, in its order and by its names.
     public static List<PaperPreset> For(PrintQueue q, PrintTicket t)
     {
         var media = DriverTicket.Options(q, t, "psk:PageMediaType");
@@ -141,13 +157,21 @@ public sealed record PaperPreset(string Label, string MediaOption, string Qualit
         var high = quality.FirstOrDefault(o => o.Name == "psk:High")?.Name
                    ?? quality.FirstOrDefault(o => o.Name == "psk:Photographic")?.Name
                    ?? quality.FirstOrDefault()?.Name ?? "psk:High";
-        var list = new List<PaperPreset>();
-        foreach (var (label, match, fallback, hint) in Wanted)
-        {
-            var found = media.FirstOrDefault(match) ?? media.FirstOrDefault(o => o.Name == fallback);
-            if (found != null && list.All(p => p.MediaOption != found.Name)) list.Add(new PaperPreset(label, found.Name, high, hint));
-        }
-        return list;
+        return media
+            .Where(o => !string.IsNullOrWhiteSpace(o.Name))
+            .GroupBy(o => o.Name).Select(g => g.First())
+            .Select(o => new PaperPreset(o.Display.Trim(), o.Name, high, Hints.FirstOrDefault(h => h.Match(o)).Hint ?? ""))
+            .ToList();
+    }
+
+    /// The preset a remembered choice names: the driver keyword saved now,
+    /// or a label from the old one-click buttons.
+    public static PaperPreset? Find(List<PaperPreset> presets, string? remembered)
+    {
+        if (string.IsNullOrEmpty(remembered)) return null;
+        if (presets.FirstOrDefault(p => p.MediaOption == remembered) is { } byName) return byName;
+        var legacy = Legacy.FirstOrDefault(l => l.Label == remembered).Match;
+        return legacy == null ? null : presets.FirstOrDefault(p => legacy(new DriverOption(p.MediaOption, p.Label)));
     }
 
     /// Sets the paper type and quality on the given paper size (the size

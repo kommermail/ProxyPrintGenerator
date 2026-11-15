@@ -111,14 +111,13 @@ public static class TutorialSheet
             [
                 "**Scale:** 600 is right for home printers. Save 1200 or 1800 for a print shop.",
                 "Flip on **AUTO** on the **WOW!** realism sticker. It adds vibrance and lifts the midtones, so cards print bright and punchy instead of dull.",
-                "Under **Paper and printer**, pick your paper size. If a card edge gets cut off, turn on **Fit to my printer**.",
                 "Want your printer maker's exact paper types, like matte photo paper? The print window can get the maker's driver for you, with a short **printer setup guide**. It's optional; everything prints fine without it.",
             ]));
         steps.Children.Add(Step(5, "Build and print",
             [
                 "Click **Build PDF**, then **Print**. The app always prints at actual size, so every card comes out true to size.",
-                "For the richest colors, print on matte photo paper and pick its preset in the print window.",
-                "Cut along the guides and slide each proxy into a sleeve in front of an old card. It feels just like the real thing.",
+                "Cut each card out along the guides.",
+                "**Sleeve it the right way:** put the printed card inside the sleeve at the front, facing out, with a regular playing card behind it. The playing card gives it the proper stiffness, so it shuffles and feels just like a real card.",
             ]));
 
         steps.Children.Add(new OrnamentCaption
