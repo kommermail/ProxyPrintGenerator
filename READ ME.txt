@@ -43,12 +43,16 @@ It does not mean anything is wrong with it.
   does: https://github.com/kommermail/ProxyPrintGenerator
 - The app connects to Scryfall, for card data and images. It connects
   to GitHub only if you turn on automatic update checks or click "Check
-  for updates", and to no other website: it refuses to download from
-  anywhere else. Every connection is secure (HTTPS). The Ko-fi button
+  for updates", and to your printer maker's download server only when
+  you click "Get the driver for me" in the print window, for a driver
+  listed in the app's GitHub repository. It connects to no other
+  website: it refuses to download from anywhere else. Every connection is secure (HTTPS). The Ko-fi button
   and the tutorial's Moxfield link open in your web browser, and only
   when you click them.
-- Apart from updating itself when you say so, it doesn't install
-  anything, doesn't change any Windows settings, and doesn't collect
+- Apart from updating itself when you say so (and running your printer
+  maker's own driver installer, only when you ask for it), it doesn't
+  install anything, doesn't change any Windows settings (it adds a printer
+  only when you click Set it up for me), and doesn't collect
   any personal information.
 - Only download it from the GitHub Releases page. Each release lists a
   checksum, so you can confirm your copy is the real one.
@@ -66,6 +70,9 @@ PRINTING TIPS
   they can use; higher scales are for print shops.
 - If a card edge gets clipped, turn on Fit to my printer (under Paper
   and printer) and pick your printer, or use Shift up.
+- For your printer maker's exact paper types (like matte photo paper),
+  use its own driver: the print window offers to get it and set the
+  printer up with it, or click "Show me how" for a short guide.
 
 NOT AFFILIATED
 ProxyPrintGenerator is unofficial Fan Content and is not approved or

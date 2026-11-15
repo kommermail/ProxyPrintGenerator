@@ -226,8 +226,10 @@ public static class PrintSheet
 
         // Printers.
         var server = new LocalPrintServer();
-        var queues = server.GetPrintQueues([EnumeratedPrintQueueTypes.Local, EnumeratedPrintQueueTypes.Connections])
-            .OrderBy(q => q.FullName).ToList();
+        // Fax queues are left out: they can't print proxies.
+        List<PrintQueue> ReadQueues() => server.GetPrintQueues([EnumeratedPrintQueueTypes.Local, EnumeratedPrintQueueTypes.Connections])
+            .Where(q => !PrinterDrivers.IsFax(q)).OrderBy(q => q.FullName).ToList();
+        var queues = ReadQueues();
         if (queues.Count == 0) { job.PrintStatus = "No printers are installed."; return; }
         string? defaultName = null;
         try { defaultName = LocalPrintServer.GetDefaultPrintQueue().FullName; } catch { }
@@ -335,7 +337,12 @@ public static class PrintSheet
         Row("Color", colorBox);
         Row("More", prefs);
 
+        // What to know about the chosen printer: offline, paused, or on
+        // Windows' generic driver when its maker's driver would offer
+        // the real paper types (PrinterDrivers, PrinterSetup).
+        var adviceHost = new StackPanel();
         var options = new StackPanel();
+        options.Children.Add(adviceHost);
         options.Children.Add(grid);
         options.Children.Add(summary);
         options.Children.Add(warning);
@@ -409,6 +416,100 @@ public static class PrintSheet
             }
             if (again != null) ApplyPreset(again);
             else Refresh();
+            _ = RefreshAdvice();
+        }
+
+        PrinterStatus? statusNow = null;
+        async Task<PrinterStatus?> ReadStatus()
+        {
+            var name = queue.FullName;
+            try { return (await Task.Run(PrinterDrivers.Load)).FirstOrDefault(x => x.Queue == name); }
+            catch { return null; }
+        }
+
+        async Task RefreshAdvice()
+        {
+            var forQueue = queue.FullName;
+            var st = await ReadStatus();
+            if (forQueue != queue.FullName) return;
+            statusNow = st;
+            adviceHost.Children.Clear();
+            if (st == null) return;
+            foreach (var a in PrinterDrivers.Advice(st))
+            {
+                var box = new StackPanel();
+                box.Children.Add(new TextBlock
+                {
+                    Text = a.Text, TextWrapping = TextWrapping.Wrap, FontSize = 15.5, FontFamily = Theme.Fell,
+                    Foreground = a.IsProblem ? Theme.Brush(Color.FromRgb(150, 40, 10)) : Theme.Brush(Theme.Ink),
+                });
+                var buttons = new WrapPanel { Margin = new Thickness(0, 6, 0, 0) };
+                if (a.ActionLabel is { } label)
+                {
+                    var b = SheetParts.Leather(label, 15);
+                    b.Margin = new Thickness(0, 0, 8, 0);
+                    b.Click += async (_, _) => await RunAdvice(a, st);
+                    buttons.Children.Add(b);
+                }
+                if (a.Id is "readd" or "getdriver")
+                {
+                    var how = SheetParts.Leather("Show me how", 15);
+                    how.ToolTip = "A short, skippable guide to everything done outside the app";
+                    how.Click += (_, _) => PrinterSetup.ShowGuide(statusNow, async () => { await RefreshAdvice(); return statusNow; },
+                        () => RunAdvice(a with { Action = AdviceAction.FindDriver }, statusNow ?? st),
+                        () => RunAdvice(a with { Action = AdviceAction.SetUpForMe }, statusNow ?? st));
+                    buttons.Children.Add(how);
+                }
+                if (buttons.Children.Count > 0) box.Children.Add(buttons);
+                adviceHost.Children.Add(new Border
+                {
+                    CornerRadius = new CornerRadius(10), Padding = new Thickness(12, 9, 12, 10), Margin = new Thickness(0, 0, 0, 10),
+                    Background = Theme.Brush(a.IsProblem ? Color.FromRgb(255, 225, 210) : Color.FromRgb(255, 246, 222), 0.75),
+                    BorderBrush = Theme.Brush(a.IsProblem ? Color.FromRgb(190, 70, 40) : Theme.Gold), BorderThickness = new Thickness(1.2),
+                    Child = box,
+                });
+            }
+        }
+
+        async Task RunAdvice(PrinterAdvice a, PrinterStatus st)
+        {
+            try
+            {
+                switch (a.Action)
+                {
+                    case AdviceAction.OpenPrinterSettings:
+                        PrinterDrivers.OpenPrinterSettings();
+                        break;
+                    case AdviceAction.Choose when a.Target != null:
+                        printerBox.SelectedItem = a.Target;
+                        break;
+                    case AdviceAction.FindDriver:
+                        var got = await PrinterSetup.GetDriverAsync(st, t => status.Text = t);
+                        if (got == null) { status.Text = ""; break; }
+                        status.Text = got;
+                        await RefreshAdvice();
+                        // The installer may have added the printer itself;
+                        // if not, offer to set it up with the new driver.
+                        if (statusNow is { MakerDriverTwin: { } twin }) { ReloadQueues(twin); status.Text = $"{twin} is set up with the maker's driver."; }
+                        else if (statusNow is { UnusedMakerDriver: not null } fresh) await RunAdvice(a with { Action = AdviceAction.SetUpForMe }, fresh);
+                        break;
+                    case AdviceAction.SetUpForMe:
+                        var added = await PrinterSetup.SetUpAsync(st, t => status.Text = t);
+                        if (added == null) { status.Text = ""; break; }
+                        ReloadQueues(added);
+                        status.Text = $"Added {added} with the maker's driver. Pick a paper button and print.";
+                        break;
+                }
+            }
+            catch (Exception e) { status.Text = e.Message; }
+        }
+
+        void ReloadQueues(string select)
+        {
+            queues = ReadQueues();
+            printerBox.Items.Clear();
+            foreach (var q in queues) printerBox.Items.Add(q.FullName);
+            printerBox.SelectedItem = queues.Any(q => q.FullName == select) ? select : queue.FullName;
         }
 
         void ApplyPreset(PaperPreset preset)

@@ -16,12 +16,13 @@ Get the latest `ProxyPrintGenerator-…-win-x64.zip` from **[Releases](../../rel
 
 After that, the app can keep itself up to date. The first time it opens, it asks whether it may check GitHub for a newer version each time it starts. When there is one, it shows what's new and asks before installing. **Update now** downloads the release zip, checks it against the checksum GitHub lists, and restarts into the new version.
 
-**Is it safe?** Yes. That warning appears for almost any new app without a paid code-signing certificate, and it's normal for this one. Every release is tested before it goes out: on the developer's own PC, and on a fresh Windows machine in the cloud, where it's also scanned with Microsoft Defender ([see the checks](../../actions/workflows/release-check.yml)). The app connects only to Scryfall, plus GitHub if you allow update checks ([details](#what-the-app-connects-to)). It installs nothing beyond updating itself when you say so, and collects no personal information. Each release lists a checksum so you can confirm your download is genuine.
+**Is it safe?** Yes. That warning appears for almost any new app without a paid code-signing certificate, and it's normal for this one. Every release is tested before it goes out: on the developer's own PC, and on a fresh Windows machine in the cloud, where it's also scanned with Microsoft Defender ([see the checks](../../actions/workflows/release-check.yml)). The app connects only to Scryfall, plus GitHub if you allow update checks, and your printer maker's server if you ask it to get a printer driver ([details](#what-the-app-connects-to)). It installs nothing beyond updating itself when you say so (a printer driver is installed by the maker's own installer, only when you ask for it), and collects no personal information. Each release lists a checksum so you can confirm your download is genuine.
 
 ## What the app connects to
 
 - **Scryfall** (`api.scryfall.com` and `cards.scryfall.io`), for card data and images.
 - **GitHub**, only if you turn on automatic update checks or click **Check for updates**. A check asks `api.github.com` for the newest version number, and nothing about you or your decks is sent. The release zip is downloaded from GitHub only when you click **Update now**.
+- **Your printer maker's download server** (Windows), only when you click **Get the driver for me** in the print window. The app first reads [`drivers.json`](drivers.json) from this repository on GitHub, which names the exact installer, and downloads it only from that maker's own server (Canon, Epson, Brother or HP). It runs the installer only if the file matches the checksum in that list and is signed by the maker, and Windows asks for your permission first.
 - **No other website.** The app refuses to download from anywhere else, and every connection is secure (HTTPS). The Ko-fi button, the tutorial's Moxfield link and the release notes link open in your web browser, and only when you click them.
 
 ## Features
@@ -53,6 +54,7 @@ After that, the app can keep itself up to date. The first time it opens, it asks
   - The driver's own quality and paper type lists, plus your printer's full Preferences window.
   - One-click paper presets: Plain, Canon Matte Photo, Photo Paper Plus Glossy II, and Glossy.
   - Tells your printer the paper size the pages were built for, and warns if it doesn't take that paper or can't reach a card edge.
+  - Spots a printer that's offline, paused or jammed, and one using Windows' generic driver when its maker's driver would offer the exact paper types. **Get the driver for me** downloads and checks the maker's installer, **Set it up for me** adds the printer with that driver, and a short, skippable **printer setup guide** covers the rest.
 - **Formats**
   - PDF: each unique face is stored once.
   - PNG: one tall image, verified after writing.

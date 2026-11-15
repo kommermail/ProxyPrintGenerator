@@ -78,6 +78,18 @@ public partial class App : Application
             Shutdown();
             return;
         }
+        if (e.Args.Length == 4 && e.Args[0] == "--add-printer")
+        {
+            // Set it up for me, run elevated by the print sheet: adds the
+            // printer again with its maker's driver. Every value is
+            // checked again here before anything is added.
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            int code;
+            try { code = Views.PrinterDrivers.AddPrinterElevated(e.Args[1], e.Args[2], e.Args[3]); }
+            catch { code = 1; }
+            Shutdown(code);
+            return;
+        }
         if (e.Args.Length >= 3 && e.Args[0] == "--print-xps")
         {
             // Checks the print path without a printer: PDF in, spooled XPS out.

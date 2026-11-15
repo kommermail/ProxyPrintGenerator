@@ -112,6 +112,7 @@ public static class TutorialSheet
                 "**Scale:** 600 is right for home printers. Save 1200 or 1800 for a print shop.",
                 "Flip on **AUTO** on the **WOW!** realism sticker. It adds vibrance and lifts the midtones, so cards print bright and punchy instead of dull.",
                 "Under **Paper and printer**, pick your paper size. If a card edge gets cut off, turn on **Fit to my printer**.",
+                "Want your printer maker's exact paper types, like matte photo paper? The print window can get the maker's driver for you, with a short **printer setup guide**. It's optional; everything prints fine without it.",
             ]));
         steps.Children.Add(Step(5, "Build and print",
             [
