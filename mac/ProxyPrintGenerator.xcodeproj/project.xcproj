@@ -126,6 +126,7 @@
         "SWIFT_DEFAULT_ACTOR_ISOLATION": "MainActor",
         "SWIFT_EMIT_LOC_STRINGS": "YES",
         "SWIFT_OBJC_BRIDGING_HEADER": "ProxyPrintGenerator/ProxyPrintGenerator-Bridging-Header.h",
+        "OTHER_LDFLAGS[sdk=macosx*]": "-lcups",
         "SWIFT_OPTIMIZATION_LEVEL[config=Debug]": "-Onone",
         "SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY": "YES",
         "SWIFT_VERSION": "5.0",

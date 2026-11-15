@@ -666,6 +666,7 @@ final class PrintJobModel: ObservableObject {
         #endif
     }
 
+    #if os(macOS)
     /// Apply one of the driver's presets, by name, to
     /// a print info. Callers set the build's paper size
     /// and the job's duplex choice after this, so those
@@ -717,6 +718,7 @@ final class PrintJobModel: ObservableObject {
         }
         #endif
     }
+    #endif
 
     /// Send pages of the built PDF to the native print panel:
     /// the whole file when `range` is nil, or just that slice
@@ -744,7 +746,7 @@ final class PrintJobModel: ObservableObject {
 
     /// A copy of the PDF holding only the given pages, in the
     /// temporary folder, for handing to the print panel.
-    private static func slicePDF(_ url: URL,
+    static func slicePDF(_ url: URL,
                                  pages range: Range<Int>) -> URL? {
         guard let doc = PDFDocument(url: url) else { return nil }
         let out = PDFDocument()
@@ -767,10 +769,11 @@ final class PrintJobModel: ObservableObject {
     /// page, so no scaling and no rotation. The printer,
     /// copies, paper, color, and the Canon driver choices all
     /// live in the panel itself, where they belong.
-    private static func presentPrintPanel(url: URL,
-                                          jobName: String,
-                                          duplex: Bool,
-                                          presetName: String? = nil)
+    static func presentPrintPanel(url: URL,
+                                  jobName: String,
+                                  duplex: Bool,
+                                  presetName: String? = nil,
+                                  printerName: String? = nil)
         -> String? {
         #if os(macOS)
         guard let doc = PDFDocument(url: url) else {
@@ -778,6 +781,9 @@ final class PrintJobModel: ObservableObject {
                 + "for printing."
         }
         let info = NSPrintInfo.shared.copy() as! NSPrintInfo
+        if let printerName, let printer = NSPrinter(name: printerName) {
+            info.printer = printer
+        }
         // A chosen driver preset goes on first: the
         // build's paper size (below) and the duplex
         // choice are set after it, so they win.
@@ -988,7 +994,9 @@ struct PrintJobButtons: View {
     @ObservedObject var model: PrintJobModel
     let result: PrintJobResult
     @Binding var message: String?
-    @State private var presetNames: [String] = []
+    #if os(macOS)
+    @State private var request: MacPrintRequest?
+    #endif
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -998,48 +1006,55 @@ struct PrintJobButtons: View {
                     printButton(
                         "Print one sided pages",
                         systemImage: "doc.text") {
-                        message = model.printPages(
-                            0..<result.duplexStartPage,
-                            duplex: false)
+                        printPages(0..<result.duplexStartPage,
+                                   duplex: false,
+                                   title: "Print one sided pages")
                     }
                 }
                 printButton(
                     "Print two sided sheets",
                     systemImage: "doc.on.doc") {
-                    message = model.printPages(
-                        result.duplexStartPage..<result.pageCount,
-                        duplex: true)
+                    printPages(result.duplexStartPage..<result.pageCount,
+                               duplex: true,
+                               title: "Print two sided sheets")
                 }
             }
         } else {
             printButton("Print", systemImage: "printer") {
-                message = model.printPages(nil, duplex: false)
+                printPages(nil, duplex: false, title: "Print")
             }
-            #if os(macOS)
-            if !presetNames.isEmpty {
-                Menu {
-                    ForEach(presetNames, id: \.self) { name in
-                        Button(name) {
-                            message = model.printPages(
-                                nil, duplex: false,
-                                presetName: name)
-                        }
-                    }
-                } label: {
-                    Label("Print with a preset",
-                          systemImage: "slider.horizontal.3")
-                        .frame(maxWidth: .infinity)
-                }
-                .buildControlSize()
+        }
+        }
+        #if os(macOS)
+        .sheet(item: $request) { r in
+            MacPrintSheet(request: r) { line in
+                if let line { message = line }
             }
-            #endif
         }
+        #endif
+    }
+
+    /// On the Mac, the app's own print sheet; on iOS, the system
+    /// print controller, as before.
+    private func printPages(_ range: Range<Int>?, duplex: Bool,
+                            title: String) {
+        #if os(macOS)
+        var url = result.outputURL
+        if let range {
+            guard let sliced = PrintJobModel.slicePDF(
+                result.outputURL, pages: range) else {
+                message = "[PPG:PRINT] Could not prepare those pages for printing."
+                return
+            }
+            url = sliced
         }
-        .onAppear {
-            #if os(macOS)
-            presetNames = PrintJobModel.driverPresetNames()
-            #endif
-        }
+        request = MacPrintRequest(
+            title: title, url: url, jobName: model.outputName,
+            duplex: duplex,
+            fittedPrinter: model.marginMode == .fit ? model.fitPrinter : nil)
+        #else
+        message = model.printPages(range, duplex: duplex)
+        #endif
     }
 
     private func printButton(_ title: String,

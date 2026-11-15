@@ -27,8 +27,8 @@
 //  of Downloads) can't update itself and offers the download page.
 //
 
-#if os(macOS)
 import Foundation
+#if os(macOS)
 import AppKit
 import CryptoKit
 import Security

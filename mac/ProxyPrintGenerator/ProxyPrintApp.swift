@@ -26,6 +26,9 @@ struct ProxyPrintApp: App {
         // Before DeckStore opens decks.json: bring decks over from
         // the old App Sandbox container, once.
         AppData.migrateFromSandboxContainer()
+        #if DEBUG
+        MacPrinting.selfTest()
+        #endif
         #endif
         for name in ["CinzelDecorative-Bold", "CinzelDecorative-Regular",
                      "Cinzel-Bold", "Cinzel-Regular",
