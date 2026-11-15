@@ -4,11 +4,12 @@
 //
 //  The app's own print window on the Mac, mirrored from the Windows
 //  build's print sheet (Nov 14, 2026): printer, copies and page range,
-//  one-click paper presets, the driver's paper type and quality lists,
-//  and a page preview. It always prints at actual size, tells the
-//  printer the paper size the pages were built for, and sends the job
-//  straight to the printer (MacPrinting.submit). Apple's own print
-//  dialog is still one click away under More options.
+//  one Paper list with every paper the driver offers (picking one sets
+//  the best quality too, as on Windows), a quality list, and a page
+//  preview. It always prints at actual size, tells the printer the paper
+//  size the pages were built for, and sends the job through Apple's print
+//  system with the settings on its ticket (MacPrinting.submit). Apple's
+//  own print dialog is still one click away under More options.
 //
 //  It also says what's wrong with a printer before you print: stopped
 //  queues, and printers added with Apple's generic AirPrint driver when
@@ -42,7 +43,6 @@ struct MacPrintSheet: View {
     @State private var printers: [MacPrinter] = []
     @State private var loaded = false
     @State private var printerID: String?
-    @State private var preset: String?
     @State private var media: String?
     @State private var quality: String?
     @State private var copies = 1
@@ -61,8 +61,11 @@ struct MacPrintSheet: View {
 
     private var choosable: [MacPrinter] { printers.filter { !$0.isFax } }
     private var printer: MacPrinter? { printers.first { $0.id == printerID } }
-    private var presets: [MacPrinting.PaperPreset] {
-        printer.map(MacPrinting.presets) ?? []
+    /// The chosen paper's tip (luster: which side, how long to dry).
+    private var paperHint: String? {
+        guard let label = printer?.mediaType?.choices.first(where: { $0.value == media })?.label
+        else { return nil }
+        return MacPrinting.paperHint(label)
     }
 
     var body: some View {
@@ -71,6 +74,7 @@ struct MacPrintSheet: View {
                 .fixedSize()
             HStack(alignment: .top, spacing: 20) {
                 previewPane
+                    .leatherCard()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
                         if !loaded {
@@ -88,13 +92,17 @@ struct MacPrintSheet: View {
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .leatherCard()
                 }
             }
             if let errorText {
                 line(errorText, 16)
                     .foregroundStyle(Color(red: 1, green: 0.54, blue: 0.48))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .leatherCard(padding: 10)
             }
             buttons
+                .leatherCard(padding: 10)
         }
         .padding(24)
         .frame(width: 820, height: 640)
@@ -134,13 +142,13 @@ struct MacPrintSheet: View {
                     Rectangle().fill(Color.white.opacity(0.15))
                 }
             }
-            .frame(width: 230, height: 300)
+            .frame(width: 216, height: 282)
             line("\(pageCount) \(pageCount == 1 ? "page" : "pages") · \(paperLabel)", 15)
                 .opacity(0.8)
             line("Always prints at actual size", 15)
                 .opacity(0.8)
         }
-        .frame(width: 240)
+        .frame(width: 226)
     }
 
     @ViewBuilder private var settings: some View {
@@ -158,24 +166,38 @@ struct MacPrintSheet: View {
             ForEach(MacPrinting.advice(for: printer)) { a in
                 adviceBox(a)
             }
-            if !presets.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    KingdomText(text: "Paper", size: 19)
-                    HStack(spacing: 8) {
-                        ForEach(presets) { p in
-                            Button(p.label) { apply(p) }
-                                .buttonStyle(.bordered)
-                                .tint(preset == p.label ? Theme.gold : nil)
-                                .help(p.hint)
+            if let option = printer.mediaType {
+                // One list for the paper, like the Windows build: every
+                // paper the driver offers, by its own names; picking one
+                // also sets the driver's best quality.
+                row("Paper") {
+                    Picker("", selection: Binding(
+                        get: { media },
+                        set: { pickPaper($0, on: printer) })) {
+                        ForEach(option.choices, id: \.value) { c in
+                            Text(Self.friendly(c.label)).tag(Optional(c.value))
                         }
                     }
+                    .labelsHidden()
+                    .frame(width: 300)
+                    .help("Every paper your printer lists. Picking one also sets its best quality.")
+                }
+                if let paperHint {
+                    line(paperHint, 15)
+                        .opacity(0.85)
+                        .padding(.leading, 122)
                 }
             }
-            if let option = printer.mediaType {
-                optionRow(option, selection: $media)
-            }
             if let option = printer.quality {
-                optionRow(option, selection: $quality)
+                row("Print quality") {
+                    Picker("", selection: $quality) {
+                        ForEach(option.choices, id: \.value) { c in
+                            Text(Self.friendly(c.label)).tag(Optional(c.value))
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 300)
+                }
             }
             row("Copies") {
                 Stepper(value: $copies, in: 1...99) {
@@ -232,7 +254,7 @@ struct MacPrintSheet: View {
         row(Self.friendly(option.label)) {
             Picker("", selection: Binding(
                 get: { selection.wrappedValue },
-                set: { selection.wrappedValue = $0; preset = nil })) {
+                set: { selection.wrappedValue = $0 })) {
                 ForEach(option.choices, id: \.value) { c in
                     Text(Self.friendly(c.label)).tag(Optional(c.value))
                 }
@@ -351,53 +373,44 @@ struct MacPrintSheet: View {
         loaded = true
     }
 
-    /// The printer's own defaults, then what was used last time,
-    /// when this printer offers it.
+    /// The printer's own defaults, then the paper and quality used last
+    /// time, when this printer offers them.
     private func choosePaper(for p: MacPrinter, memory: MacPrintMemory) {
         media = p.mediaType?.defaultValue
         quality = p.quality?.defaultValue
-        preset = nil
-        if let name = memory.preset,
-           let match = MacPrinting.presets(for: p).first(where: { $0.label == name }) {
-            apply(match)
-        } else {
-            if let m = memory.media, p.mediaType?.choices.contains(where: { $0.value == m }) == true {
-                media = m
-            }
-            if let q = memory.quality, p.quality?.choices.contains(where: { $0.value == q }) == true {
-                quality = q
-            }
+        if let m = memory.media, p.mediaType?.choices.contains(where: { $0.value == m }) == true {
+            media = m
+        }
+        if let q = memory.quality, p.quality?.choices.contains(where: { $0.value == q }) == true {
+            quality = q
         }
     }
 
-    private func apply(_ p: MacPrinting.PaperPreset) {
-        preset = p.label
-        if let m = p.media { media = m }
-        if let q = p.quality { quality = q }
-    }
-
-    private func jobOptions(for p: MacPrinter) -> [String: String] {
-        MacPrinting.jobOptions(
-            printer: p, pageSize: pageSize, copies: copies,
-            pages: allPages ? nil : fromPage...toPage,
-            media: media, quality: quality, duplex: request.duplex)
+    /// A paper picked from the list: that paper, at the driver's best
+    /// quality (the quality list can still change it).
+    private func pickPaper(_ value: String?, on p: MacPrinter) {
+        media = value
+        if let best = MacPrinting.bestQuality(p.quality) { quality = best }
     }
 
     private func send() {
         guard let p = printer else { return }
         sending = true
         errorText = nil
-        let options = jobOptions(for: p)
+        let job = MacPrinting.jobSettings(
+            printer: p, pageSize: pageSize, copies: copies,
+            pages: allPages ? nil : fromPage...toPage,
+            media: media, quality: quality, duplex: request.duplex)
         let url = request.url, title = request.jobName, queue = p.id
         Task {
             do {
-                let job = try await Task.detached {
-                    try MacPrinting.submit(file: url, to: queue, title: title, options: options)
+                try await Task.detached {
+                    try MacPrinting.submit(file: url, to: queue, title: title, settings: job)
                 }.value
-                MacPrintMemory(printer: p.id, preset: preset,
+                MacPrintMemory(printer: p.id, preset: nil,
                                media: media, quality: quality).save()
                 let paper = p.mediaType?.choices.first { $0.value == media }?.label
-                var message = "Sent to \(p.displayName) (job \(job))"
+                var message = "Sent to \(p.displayName)"
                 if let paper { message += " on \(Self.friendly(paper))" }
                 onDone(message + ".")
                 dismiss()

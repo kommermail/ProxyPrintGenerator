@@ -69,6 +69,7 @@ struct PrinterSetupGuide: View {
             progressDots
             Divider().overlay(Theme.gold.opacity(0.5))
             ScrollView { stepView.frame(maxWidth: .infinity, alignment: .leading) }
+                .leatherCard()
             Divider().overlay(Theme.gold.opacity(0.5))
             navigation
         }
@@ -182,7 +183,7 @@ struct PrinterSetupGuide: View {
                 }
             case .print:
                 bullet("In the print window, pick the printer that uses \(maker)'s driver.")
-                bullet("Click a paper button, like **Matte photo**, to match the paper in the tray. It sets the best quality too.")
+                bullet("Pick the paper in the tray from the **Paper** list, like **Matte Photo Paper**. It sets the best quality too.")
                 bullet("Click **Print**. Cards always print at actual size.")
             }
         }

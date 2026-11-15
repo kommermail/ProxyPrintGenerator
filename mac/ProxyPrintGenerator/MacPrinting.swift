@@ -360,6 +360,31 @@ nonisolated enum MacPrinting {
         return list
     }
 
+    /// A tip for papers we know, shown under the Paper list (the same
+    /// tips as the Windows build).
+    static func paperHint(_ label: String) -> String? {
+        let l = label.lowercased()
+        if l.contains("plain") || l == "stationery" {
+            return "Plain paper: fine for test sheets and playtest proxies. Don't use it for photo paper: it lays down too much ink and smears."
+        }
+        if l.contains("luster") {
+            return "Photo Paper Pro Luster: print on the smooth, bright white side (not the side with the logo). Let prints dry 10+ minutes before cutting or stacking."
+        }
+        if l.contains("matte") {
+            return "Matte photo paper: no glare, and it takes a sleeve well. Print on the brighter white side."
+        }
+        if l.contains("plus glossy ii") {
+            return "Photo Paper Plus Glossy II: the richest color and deepest blacks. Let prints dry a few minutes before cutting."
+        }
+        if l.contains("semi-gloss") {
+            return "Semi-gloss photo paper: print on the shiny side. Let prints dry a few minutes before cutting."
+        }
+        if l.contains("glossy") || l.hasPrefix("photographic") {
+            return "Glossy photo paper: print on the shiny side. Let prints dry a few minutes before cutting."
+        }
+        return nil
+    }
+
     /// The driver's best quality: Super Fine, Best, High, or Fine.
     static func bestQuality(_ option: DriverOption?) -> String? {
         guard let choices = option?.choices else { return nil }
@@ -691,33 +716,35 @@ nonisolated enum MacPrinting {
 
     // MARK: - Send a job
 
-    /// The CUPS options for a job: copies, pages, the driver's paper
-    /// size for the build's sheet, the chosen paper type and quality
-    /// under the driver's own keywords, two sided or not, and always
-    /// actual size (the pages already are the printed sheet).
-    static func jobOptions(printer p: MacPrinter, pageSize: CGSize,
-                           copies: Int, pages: ClosedRange<Int>?,
-                           media: String?, quality: String?,
-                           duplex: Bool) -> [String: String] {
-        var o: [String: String] = [
-            "copies": "\(copies)",
-            "print-scaling": "none",
-            "fit-to-page": "false",
-            "sides": duplex ? "two-sided-long-edge" : "one-sided",
-        ]
-        if let pages { o["page-ranges"] = "\(pages.lowerBound)-\(pages.upperBound)" }
-        if let size = p.pageSizeName(for: pageSize) { o["PageSize"] = size }
-        if let k = p.mediaType?.keyword, let media { o[k] = media }
-        if let k = p.quality?.keyword, let quality { o[k] = quality }
-        if p.duplex != nil { o["Duplex"] = duplex ? "DuplexNoTumble" : "None" }
+    /// Everything a print job carries: copies, pages, the driver's paper
+    /// size for the build's sheet, the chosen paper type and quality under
+    /// the driver's own keywords, and two sided or not. Pages are already
+    /// the printed sheet, so nothing is scaled.
+    struct JobSettings: Sendable {
+        var copies = 1
+        var pages: ClosedRange<Int>? = nil
+        /// The driver's PageSize name, like "Letter".
+        var paperName: String? = nil
+        /// Driver options by keyword: "CNIJMediaType": "63" and so on.
+        var driverOptions: [String: String] = [:]
+        var duplex = false
+        /// Debug only: the job waits on hold until cancelled.
+        var hold = false
+    }
+
+    static func jobSettings(printer p: MacPrinter, pageSize: CGSize,
+                            copies: Int, pages: ClosedRange<Int>?,
+                            media: String?, quality: String?,
+                            duplex: Bool) -> JobSettings {
+        var s = JobSettings(copies: copies, pages: pages,
+                            paperName: p.pageSizeName(for: pageSize),
+                            duplex: duplex && p.duplex != nil)
+        if let k = p.mediaType?.keyword, let media { s.driverOptions[k] = media }
+        if let k = p.quality?.keyword, let quality { s.driverOptions[k] = quality }
         #if DEBUG
-        // Testing without paper: the job waits on hold until
-        // cancelled.
-        if ProcessInfo.processInfo.environment["PPG_PRINT_HOLD"] != nil {
-            o["job-hold-until"] = "indefinite"
-        }
+        s.hold = ProcessInfo.processInfo.environment["PPG_PRINT_HOLD"] != nil
         #endif
-        return o
+        return s
     }
 
     #if DEBUG
@@ -776,19 +803,24 @@ nonisolated enum MacPrinting {
                 pageSize: ppd.options["PageSize"], duplex: ppd.options["Duplex"])
             out.append("ppd \(ppd.nickName) driver=\(p.driver) media=\(p.mediaType?.keyword ?? "-") quality=\(p.quality?.keyword ?? "-") best=\(bestQuality(p.quality) ?? "-") letter=\(p.pageSizeName(for: CGSize(width: 612, height: 792)) ?? "-")")
             out.append("  presets \(presets(for: p).map { "\($0.label)=\($0.media ?? "-")/\($0.quality ?? "-")" })")
-            out.append("  options \(jobOptions(printer: p, pageSize: CGSize(width: 612, height: 792), copies: 1, pages: nil, media: presets(for: p).dropFirst().first?.media, quality: presets(for: p).dropFirst().first?.quality, duplex: true).sorted { $0.key < $1.key })")
+            out.append("  job \(jobSettings(printer: p, pageSize: CGSize(width: 612, height: 792), copies: 1, pages: nil, media: presets(for: p).dropFirst().first?.media, quality: presets(for: p).dropFirst().first?.quality, duplex: true))")
         }
         if env["PPG_PRINT_HOLD"] != nil, let pdf = env["PPG_PRINT_SELFTEST_PDF"],
            let p = all.first(where: { !$0.isFax && !$0.isStopped }) {
-            let preset = presets(for: p).last
-            let opts = jobOptions(printer: p, pageSize: CGSize(width: 612, height: 792),
-                                  copies: 2, pages: 1...1, media: preset?.media,
-                                  quality: preset?.quality, duplex: false)
-            out.append("submit to \(p.id) options \(opts.sorted { $0.key < $1.key })")
+            let preset = presets(for: p).first { ($0.media ?? "").contains("63") || $0.label.lowercased().contains("photo") } ?? presets(for: p).last
+            // Canon's Photo Paper Pro Luster at its best quality when the
+            // driver lists it: the job that printed A4 plain before.
+            let luster = p.mediaType?.choices.contains { $0.value == "63" } == true
+            let job = jobSettings(printer: p, pageSize: CGSize(width: 612, height: 792),
+                                  copies: 2, pages: 1...1,
+                                  media: luster ? "63" : preset?.media,
+                                  quality: luster ? bestQuality(p.quality) : preset?.quality,
+                                  duplex: false)
+            out.append("submit to \(p.id): \(job)")
             do {
-                let job = try submit(file: URL(fileURLWithPath: pdf), to: p.id,
-                                     title: "PPG self-test", options: opts)
-                out.append("job \(job)")
+                try submit(file: URL(fileURLWithPath: pdf), to: p.id,
+                           title: "PPG self-test", settings: job)
+                out.append("sent")
             } catch {
                 out.append("error \(error.localizedDescription)")
             }
@@ -802,24 +834,88 @@ nonisolated enum MacPrinting {
         var errorDescription: String? { message }
     }
 
-    /// Sends a PDF straight to a CUPS queue with these options
-    /// (copies, PageSize, media type, quality, Duplex, ...), the way
-    /// lp does. Returns the job number.
+    /// Sends a PDF to a printer through Apple's print system (Core
+    /// Printing), the way Preview's Print does, with the job's settings
+    /// on its print ticket. Some makers' drivers (Canon's, Nov 15, 2026)
+    /// read their settings only from that ticket: a job sent straight to
+    /// CUPS with the same settings as plain options printed on the
+    /// driver's defaults, A4 plain paper, instead of Letter Pro Luster.
     static func submit(file: URL, to queue: String, title: String,
-                       options: [String: String]) throws -> Int32 {
-        var opts: UnsafeMutablePointer<cups_option_t>? = nil
-        var count: Int32 = 0
-        for (k, v) in options {
-            count = cupsAddOption(k, v, count, &opts)
+                       settings job: JobSettings) throws {
+        func fail(_ what: String, _ status: OSStatus) -> PrintError {
+            PrintError(message: "The print system couldn't \(what) (error \(status)).")
         }
-        defer { cupsFreeOptions(count, opts) }
-        let job = cupsPrintFile2(nil, queue, file.path, title, count, opts)
-        if job == 0 {
-            let reason = cupsLastErrorString().map { String(cString: $0) }
-                ?? "unknown error"
-            throw PrintError(message: "The printer didn't take the job: \(reason)")
+        guard let printer = PMPrinterCreateFromPrinterID(queue as CFString) else {
+            throw PrintError(message: "\(queue) isn't set up on this Mac any more.")
         }
-        return job
+        defer { PMRelease(PMObject(printer)) }
+
+        var sessionOut: PMPrintSession?
+        guard PMCreateSession(&sessionOut) == noErr, let session = sessionOut else {
+            throw PrintError(message: "The print system didn't start.")
+        }
+        defer { PMRelease(PMObject(session)) }
+        var status = PMSessionSetCurrentPMPrinter(session, printer)
+        guard status == noErr else { throw fail("pick that printer", status) }
+
+        var settingsOut: PMPrintSettings?
+        guard PMCreatePrintSettings(&settingsOut) == noErr, let settings = settingsOut else {
+            throw PrintError(message: "The print system didn't start.")
+        }
+        defer { PMRelease(PMObject(settings)) }
+        PMSessionDefaultPrintSettings(session, settings)
+        PMPrintSettingsSetJobName(settings, title as CFString)
+        PMSetCopies(settings, UInt32(max(1, job.copies)), false)
+        if let pages = job.pages {
+            PMSetFirstPage(settings, UInt32(pages.lowerBound), false)
+            PMSetLastPage(settings, UInt32(pages.upperBound), false)
+        } else {
+            PMSetFirstPage(settings, 1, false)
+            PMSetLastPage(settings, UInt32(kPMPrintAllPages), false)
+        }
+        PMSetDuplex(settings, PMDuplexMode(job.duplex ? kPMDuplexNoTumble : kPMDuplexNone))
+        // The driver's own options go on the ticket under their keywords,
+        // where the driver looks for them (and CUPS gets them too).
+        for (key, value) in job.driverOptions {
+            PMPrintSettingsSetValue(settings, key as CFString, value as CFString, false)
+        }
+        if job.hold {
+            PMPrintSettingsSetValue(settings, "job-hold-until" as CFString, "indefinite" as CFString, false)
+        }
+
+        // The page format: the driver's paper for the build's sheet.
+        var formatOut: PMPageFormat?
+        if let name = job.paperName, let paper = paper(named: name, on: printer) {
+            status = PMCreatePageFormatWithPMPaper(&formatOut, paper)
+        } else {
+            status = PMCreatePageFormat(&formatOut)
+            if status == noErr, let f = formatOut { PMSessionDefaultPageFormat(session, f) }
+        }
+        guard status == noErr, let format = formatOut else { throw fail("set the paper size", status) }
+        defer { PMRelease(PMObject(format)) }
+        PMSetScale(format, 100)
+        PMSessionValidatePrintSettings(session, settings, nil)
+        PMSessionValidatePageFormat(session, format, nil)
+
+        status = PMPrinterPrintWithFile(printer, settings, format, "application/pdf" as CFString, file as CFURL)
+        guard status == noErr else { throw fail("send the job", status) }
+    }
+
+    /// The printer's paper whose driver name is this ("Letter").
+    private static func paper(named name: String, on printer: PMPrinter) -> PMPaper? {
+        var listOut: Unmanaged<CFArray>?
+        guard PMPrinterGetPaperList(printer, &listOut) == noErr,
+              let list = listOut?.takeUnretainedValue() else { return nil }
+        for i in 0..<CFArrayGetCount(list) {
+            guard let raw = CFArrayGetValueAtIndex(list, i) else { continue }
+            let paper: PMPaper = OpaquePointer(raw)
+            var ppdName: Unmanaged<CFString>?
+            if PMPaperGetPPDPaperName(paper, &ppdName) == noErr,
+               ppdName?.takeUnretainedValue() as String? == name {
+                return paper
+            }
+        }
+        return nil
     }
 }
 

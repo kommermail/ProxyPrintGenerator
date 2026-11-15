@@ -582,6 +582,24 @@ extension View {
 }
 
 
+/// A solid leather card behind a block of text and controls, the
+/// picker chip's look at panel size: over the tooled leather artwork,
+/// light text reads unevenly, letter by letter; on this every letter
+/// reads the same. The print window and printer guide sit on it
+/// (Liam, Nov 15, 2026).
+extension View {
+    func leatherCard(padding: CGFloat = 14) -> some View {
+        self
+            .padding(padding)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Theme.leatherDeep.opacity(0.94)))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Theme.gold.opacity(0.55), lineWidth: 1.2))
+    }
+}
+
 /// The little brother of the picker chip, for a lone gold
 /// arrow or glyph on the suede: the print margin hideaway's
 /// chevron wears it, so the arrow stays visible.
