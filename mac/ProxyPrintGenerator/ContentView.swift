@@ -289,10 +289,6 @@ struct QuickBuildView: View {
                                 KingdomText(text: "Shuffle before rendering",
                                             size: isMacUI ? 20 : 19)
                             }
-                            Toggle(isOn: $model.backToBack) {
-                                KingdomText(text: "Back to back",
-                                            size: isMacUI ? 20 : 19)
-                            }
                             HStack {
                                 KingdomText(text: "Paper",
                                             size: isMacUI ? 20 : 19)
@@ -343,8 +339,13 @@ struct QuickBuildView: View {
                                         .labelsHidden()
                                 }
                             }
-                            HideawayGroup(title: "Print margin settings") {
+                            HideawayGroup(title: "Print options",
+                                          summary: model.printOptionsSummary) {
                                 VStack(alignment: .leading, spacing: 10) {
+                            Toggle(isOn: $model.backToBack) {
+                                KingdomText(text: "Two sided back to back",
+                                            size: isMacUI ? 20 : 19)
+                            }
                             HStack {
                                 KingdomText(text: "Shift up (mm)",
                                             size: isMacUI ? 20 : 19)
@@ -555,19 +556,24 @@ struct QuickBuildView: View {
                         .listRowBackground(Color.clear)
 
                         Section {
-                            sectionHeader("Low ink calibration")
+                            sectionHeader("Color")
                                 .hiddenRowSeparator()
-                            Toggle(isOn: $model.useCalibration) {
-                                KingdomText(text: "Use calibration",
-                                            size: isMacUI ? 20 : 19)
-                            }
-                            if model.useCalibration {
-                                boostSlider("Cyan boost",
-                                            $model.cyanBoost)
-                                boostSlider("Magenta boost",
-                                            $model.magentaBoost)
-                                boostSlider("Yellow boost",
-                                            $model.yellowBoost)
+                            HideawayGroup(title: "Low ink calibration",
+                                          summary: model.calibrationSummary) {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    Toggle(isOn: $model.useCalibration) {
+                                        KingdomText(text: "Use calibration",
+                                                    size: isMacUI ? 20 : 19)
+                                    }
+                                    if model.useCalibration {
+                                        boostSlider("Cyan boost",
+                                                    $model.cyanBoost)
+                                        boostSlider("Magenta boost",
+                                                    $model.magentaBoost)
+                                        boostSlider("Yellow boost",
+                                                    $model.yellowBoost)
+                                    }
+                                }
                             }
                             HStack {
                                 Spacer()

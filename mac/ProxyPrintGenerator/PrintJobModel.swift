@@ -335,6 +335,24 @@ final class PrintJobModel: ObservableObject {
     @Published var outputName: String = "proxies"
     @Published var format: OutputFormat = .pdf
     @Published var jpegQuality: Double = 0.65
+    /// What's on under Print options, for its closed title:
+    /// "back to back, shift up 1.0 mm", or "all off".
+    var printOptionsSummary: String {
+        var on: [String] = []
+        if backToBack { on.append("back to back") }
+        if shiftUpMM > 0 {
+            on.append(String(format: "shift up %.1f mm", shiftUpMM))
+        }
+        if extraGapMM > 0 {
+            on.append(String(format: "extra gap %.2f mm", extraGapMM))
+        }
+        if marginMode == .fit { on.append("fit to my printer") }
+        if maximizeGap { on.append("max gap") }
+        return on.isEmpty ? "all off" : on.joined(separator: ", ")
+    }
+
+    var calibrationSummary: String { useCalibration ? "on" : "off" }
+
     @Published var shiftUpMM: Double = 0
     @Published var extraGapMM: Double = 0
 

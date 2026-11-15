@@ -15,6 +15,11 @@
 import SwiftUI
 import UniformTypeIdentifiers
 import ImageIO
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
 
 /// True on the Mac, where the window is large and sits farther
 /// from the eye than a phone. Text and controls sized for iOS
@@ -72,6 +77,7 @@ func jpegData(fromImageData data: Data, quality: Double = 0.92)
 
 struct LibraryView: View {
     @StateObject private var store = DeckStore()
+    @State private var showTutorial = false
     @State private var showPaste = false
     @State private var showImporter = false
     @State private var importError: String?
@@ -120,6 +126,13 @@ struct LibraryView: View {
     private var libraryPanel: some View {
         PanelScaffold {
                 List {
+                    TutorialSticker { showTutorial = true }
+                        .frame(maxWidth: .infinity)
+                        .listRowBackground(Color.clear)
+                        .hiddenRowSeparator()
+                        .listRowInsets(EdgeInsets(
+                            top: 0, leading: 20, bottom: 4,
+                            trailing: 20))
                     Menu {
                         Button {
                             showPaste = true
@@ -221,6 +234,9 @@ struct LibraryView: View {
                         Label("Add deck", systemImage: "plus")
                     }
                 }
+            }
+            .sheet(isPresented: $showTutorial) {
+                TutorialSheet()
             }
             .sheet(isPresented: $showPaste) {
                 PasteDeckSheet { name, text in
@@ -572,6 +588,8 @@ struct DeckDetailView: View {
                     DeckWideBanner(
                         entries: twoSidedEntries(in: deck),
                         onEdit: { showEditor = true },
+                        copyText: { copyDecklistText() },
+                        cardCount: deck.cardCount + deck.sideboardCount,
                         onJump: { entry in
                             jumpToTwoSided(entry, deck: deck,
                                            proxy: proxy)
@@ -634,6 +652,23 @@ struct DeckDetailView: View {
                             }
                             .font(isMacUI ? .body : .callout)
                         }
+                        // The same copy button again under the
+                        // cards, so a long deck needs no scrolling
+                        // back up.
+                        CopyDecklistButton(
+                            copyText: { copyDecklistText() },
+                            cardCount: deck.cardCount + deck.sideboardCount,
+                            size: isMacUI ? 24 : 21)
+                            .padding(.vertical, 10)
+                            .padding(.horizontal, 26)
+                            .background {
+                                WashPlaque()
+                                    .shadow(color: .black.opacity(0.35),
+                                            radius: 3, x: 0, y: 2)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 12)
+                            .padding(.bottom, 8)
                     }
                 }
             Section {
@@ -698,18 +733,19 @@ struct DeckDetailView: View {
                     KingdomText(text: "Shuffle before rendering",
                                 size: isMacUI ? 20 : 19)
                 }
-                Toggle(isOn: $job.backToBack) {
-                    KingdomText(text: "Back to back",
-                                size: isMacUI ? 20 : 19)
-                }
-                Toggle(isOn: $job.useCalibration) {
-                    KingdomText(text: "Use low ink calibration",
-                                size: isMacUI ? 20 : 19)
-                }
-                if job.useCalibration {
-                    jobBoostSlider("Cyan boost", $job.cyanBoost)
-                    jobBoostSlider("Magenta boost", $job.magentaBoost)
-                    jobBoostSlider("Yellow boost", $job.yellowBoost)
+                HideawayGroup(title: "Low ink calibration",
+                              summary: job.calibrationSummary) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Toggle(isOn: $job.useCalibration) {
+                            KingdomText(text: "Use low ink calibration",
+                                        size: isMacUI ? 20 : 19)
+                        }
+                        if job.useCalibration {
+                            jobBoostSlider("Cyan boost", $job.cyanBoost)
+                            jobBoostSlider("Magenta boost", $job.magentaBoost)
+                            jobBoostSlider("Yellow boost", $job.yellowBoost)
+                        }
+                    }
                 }
                 HStack {
                     Spacer()
@@ -780,8 +816,13 @@ struct DeckDetailView: View {
                             .labelsHidden()
                     }
                 }
-                HideawayGroup(title: "Print margin settings") {
+                HideawayGroup(title: "Print options",
+                              summary: job.printOptionsSummary) {
                     VStack(alignment: .leading, spacing: 10) {
+                Toggle(isOn: $job.backToBack) {
+                    KingdomText(text: "Two sided back to back",
+                                size: isMacUI ? 20 : 19)
+                }
                 HStack {
                     KingdomText(text: "Shift up (mm)",
                                 size: isMacUI ? 20 : 19)
@@ -1064,6 +1105,13 @@ struct DeckDetailView: View {
         )
         .onAppear { scrollProxy = proxy }
         }
+    }
+
+    /// The whole list, sideboard and all, as "1 Plains (TRK) 361"
+    /// lines, with the printings Scryfall resolved for the grid.
+    private func copyDecklistText() -> String? {
+        guard let deck else { return nil }
+        return DeckStore.exportText(for: deck, resolved: faceOptions)
     }
 
     /// The deck's two sided cards, in deck order: the ones the
@@ -1809,9 +1857,74 @@ private struct OutlinedBadgeText: View {
 /// The name list scrolls inside the banner, so a deck full
 /// of two sided cards cannot eat the page. Tapping a name
 /// jumps the wall to that card and flips it to its back.
+/// The system clipboard, on the Mac and on iOS.
+enum Clipboard {
+    static func copy(_ text: String) {
+        #if os(macOS)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        #else
+        UIPasteboard.general.string = text
+        #endif
+    }
+}
+
+/// Copy Decklist, mirrored from the Windows build (Nov 14,
+/// 2026): copies every card with its printing, like
+/// "1 Plains (TRK) 361", then says COPIED for a moment.
+/// Both labels share one spot, so the shorter one never
+/// makes the row jump.
+private struct CopyDecklistButton: View {
+    let copyText: () -> String?
+    let cardCount: Int
+    let size: CGFloat
+    @State private var copied = false
+    @State private var token = 0
+
+    var body: some View {
+        Button {
+            guard let text = copyText() else { return }
+            Clipboard.copy(text)
+            copied = true
+            token += 1
+            let mine = token
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                if token == mine { copied = false }
+            }
+        } label: {
+            ZStack {
+                label(icon: "doc.on.doc", text: "COPY DECKLIST")
+                    .opacity(copied ? 0 : 1)
+                label(icon: "checkmark",
+                      text: "COPIED \(cardCount) CARD"
+                        + (cardCount == 1 ? "" : "S"))
+                    .opacity(copied ? 1 : 0)
+            }
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Copy every card with its printing, like \"1 Plains (TRK) 361\", ready to paste anywhere")
+        .accessibilityLabel(copied ? "Copied" : "Copy decklist")
+    }
+
+    private func label(icon: String, text: String) -> some View {
+        HStack(spacing: 9) {
+            Image(systemName: icon)
+                .font(.system(size: 20, weight: .bold))
+                .foregroundStyle(Theme.ink)
+            PlaqueTitleText(text: text, size: size)
+        }
+    }
+}
+
 private struct DeckWideBanner: View {
     let entries: [SavedCardLine]
     let onEdit: () -> Void
+    /// The deck list to copy, built when the button is
+    /// clicked so it carries the printings resolved by then.
+    let copyText: () -> String?
+    let cardCount: Int
     let onJump: (SavedCardLine) -> Void
 
     /// Five names tall at most; more than that scrolls.
@@ -1821,23 +1934,29 @@ private struct DeckWideBanner: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Button {
-                onEdit()
-            } label: {
-                HStack(spacing: 9) {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 21,
-                                      weight: .bold))
-                        .foregroundStyle(Theme.ink)
-                    PlaqueTitleText(
-                        text: "EDIT THIS DECK",
-                        size: isMacUI ? 24 : 23)
+            HStack(spacing: isMacUI ? 28 : 12) {
+                Button {
+                    onEdit()
+                } label: {
+                    HStack(spacing: 9) {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 21,
+                                          weight: .bold))
+                            .foregroundStyle(Theme.ink)
+                        PlaqueTitleText(
+                            text: "EDIT THIS DECK",
+                            size: isMacUI ? 24 : 19)
+                    }
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 4)
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .help("Add, remove or change the cards in this deck")
+                CopyDecklistButton(copyText: copyText,
+                                   cardCount: cardCount,
+                                   size: isMacUI ? 24 : 19)
             }
-            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity)
             if !entries.isEmpty {
                 Rectangle()
                     .fill(Theme.gold.opacity(0.5))

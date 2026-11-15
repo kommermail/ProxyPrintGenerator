@@ -519,6 +519,11 @@ struct WidePlaque: View {
 /// so a settings list stays short.
 struct HideawayGroup<Content: View>: View {
     let title: String
+    /// What's on inside, shown beside the title while the
+    /// group is closed, so a closed group never hides a
+    /// setting that changes the print. (Mirrored from the
+    /// Windows build's Print options, Nov 14, 2026.)
+    var summary: String? = nil
     @State private var open = false
     @ViewBuilder let content: () -> Content
 
@@ -532,6 +537,12 @@ struct HideawayGroup<Content: View>: View {
                 HStack(spacing: 8) {
                     KingdomText(text: title,
                                 size: isMacUI ? 20 : 19)
+                    if let summary, !open {
+                        KingdomText(text: "(\(summary))",
+                                    size: isMacUI ? 16 : 15)
+                            .opacity(0.75)
+                            .lineLimit(1)
+                    }
                     Image(systemName: open
                             ? "chevron.up" : "chevron.down")
                         .font(.system(size: 14, weight: .bold))

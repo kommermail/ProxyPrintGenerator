@@ -339,11 +339,42 @@ public final class DeckStore: ObservableObject {
     /// carrying the currently chosen printings. This is the same text
     /// the print engine consumes and the .txt other tools accept.
     public static func deckText(for deck: SavedDeck) -> String {
+        compose(deck) { ($0.setCode, $0.collectorNumber) }
+    }
+
+    /// The deck list to paste elsewhere: "4 Plains (TRK) 361", set
+    /// codes in capitals, sideboard and maybeboard included. A line
+    /// with no exact printing of its own takes the one Scryfall
+    /// resolved for it (what the grid shows and the print uses),
+    /// once that has loaded. Mirrored from the Windows build's
+    /// Copy Decklist button, Nov 14, 2026.
+    public static func exportText(
+        for deck: SavedDeck,
+        resolved: [UUID: PrintingOption]
+    ) -> String {
+        compose(deck) { entry in
+            var set = entry.setCode
+            var number = entry.collectorNumber
+            if set == nil || number == nil,
+               let card = resolved[entry.id], !card.set.isEmpty {
+                set = card.set
+                number = card.collectorNumber.isEmpty
+                    ? nil : card.collectorNumber
+            }
+            return (set?.uppercased(), number)
+        }
+    }
+
+    private static func compose(
+        _ deck: SavedDeck,
+        printing: (SavedCardLine) -> (String?, String?)
+    ) -> String {
         func line(_ entry: SavedCardLine) -> String {
             var text = "\(entry.quantity) \(entry.name)"
-            if let set = entry.setCode {
+            let (set, number) = printing(entry)
+            if let set {
                 text += " (\(set))"
-                if let num = entry.collectorNumber { text += " \(num)" }
+                if let number { text += " \(number)" }
             }
             return text
         }
