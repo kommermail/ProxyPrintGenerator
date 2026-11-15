@@ -117,7 +117,7 @@ final class UpdateController: ObservableObject {
     func declineMove(forever: Bool) {
         if forever {
             var s = UpdateSettings.load()
-            s.neverOfferMove = true
+            s.declinedMovePath = AppMover.declineKey
             s.save()
         }
         offeringMove = false

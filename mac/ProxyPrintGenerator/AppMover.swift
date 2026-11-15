@@ -47,13 +47,24 @@ nonisolated enum AppMover {
     }
 
     /// Whether to offer the move: a copy outside Applications that isn't
-    /// an Xcode build, unless the person said not to ask again.
+    /// an Xcode build, unless the person said not to ask again about
+    /// this very copy.
     static var shouldOffer: Bool {
         #if DEBUG
-        if ProcessInfo.processInfo.environment["PPG_MOVE_TEST_DEST"] != nil { return !isInDestination }
+        let testing = ProcessInfo.processInfo.environment["PPG_MOVE_TEST_DEST"] != nil
+        #else
+        let testing = false
         #endif
-        return !isDevBuild && !isInApplications && UpdateSettings.load().neverOfferMove != true
+        if testing {
+            if isInDestination { return false }
+        } else if isDevBuild || isInApplications {
+            return false
+        }
+        return UpdateSettings.load().declinedMovePath != declineKey
     }
+
+    /// The copy "Don't ask again" is remembered for: its real location.
+    static var declineKey: String { (originalLocation() ?? current).standardizedFileURL.path }
 
     /// Where the app goes: /Applications when this account can write
     /// there (admins can), else ~/Applications.

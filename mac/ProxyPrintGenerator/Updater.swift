@@ -81,8 +81,11 @@ nonisolated struct UpdateInfo: Identifiable, Sendable {
 nonisolated struct UpdateSettings: Codable {
     var checkAtStartup: Bool?
     var skippedVersion: String?
-    /// "Don't ask again" on the Move to Applications prompt.
-    var neverOfferMove: Bool?
+    /// "Don't ask again" on the Move to Applications prompt, for the
+    /// copy at this path only: a new download asks again. (An earlier
+    /// build kept a neverOfferMove that silenced every copy for good;
+    /// it's no longer read, and drops out the next time this saves.)
+    var declinedMovePath: String?
 
     private static var fileURL: URL {
         AppData.folder.appendingPathComponent("updates.json")
