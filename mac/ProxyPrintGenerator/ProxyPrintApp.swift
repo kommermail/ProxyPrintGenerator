@@ -22,6 +22,11 @@ import CoreText
 struct ProxyPrintApp: App {
 
     init() {
+        #if os(macOS)
+        // Before DeckStore opens decks.json: bring decks over from
+        // the old App Sandbox container, once.
+        AppData.migrateFromSandboxContainer()
+        #endif
         for name in ["CinzelDecorative-Bold", "CinzelDecorative-Regular",
                      "Cinzel-Bold", "Cinzel-Regular",
                      "IMFellEnglish-Regular", "IMFellEnglish-Italic",

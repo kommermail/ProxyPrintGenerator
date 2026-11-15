@@ -86,20 +86,14 @@ struct LibraryView: View {
     /// for the open deck instead of pushing it.
     @State private var openDeckId: UUID?
 
-    /// The app's own version and build, read from the bundle
-    /// so the library footer always shows what is running.
-    /// The version shown at the foot of the library tracks
-    /// the source files, not the Xcode project setting,
-    /// which only ever reads whatever was last typed into
-    /// it and tracked nothing on its own. The number is 1
-    /// plus the highest file version divided by 100, so
-    /// file 54 shows as 1.54. When a round sends a file
-    /// version higher than this, raise this to match.
-    private let highestFileVersion = 84
-
+    /// The real version, from the app's bundle: the same number
+    /// the Windows build and GitHub Releases use (Nov 14, 2026;
+    /// it used to count file revisions and read 1.84).
     private var appVersionText: String {
-        String(format: "Version %.2f",
-               1.0 + Double(highestFileVersion) / 100.0)
+        let v = Bundle.main.object(
+            forInfoDictionaryKey: "CFBundleShortVersionString")
+            as? String ?? "?"
+        return "Version \(v)"
     }
 
     var body: some View {
@@ -205,6 +199,12 @@ struct LibraryView: View {
                         .padding(.top, 10)
                         .listRowBackground(Color.clear)
                         .hiddenRowSeparator()
+                    #if os(macOS)
+                    UpdateControls()
+                        .padding(.bottom, 8)
+                        .listRowBackground(Color.clear)
+                        .hiddenRowSeparator()
+                    #endif
                 }
                 .hiddenScrollBackground()
                 .tint(Theme.gold)

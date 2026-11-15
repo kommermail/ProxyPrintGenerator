@@ -33,7 +33,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory dl | Out-Null
-          gh release download $env:TAG -R $env:GITHUB_REPOSITORY -p "*.zip" -D dl
+          gh release download $env:TAG -R $env:GITHUB_REPOSITORY -p "*-win-x64.zip" -D dl
           Get-ChildItem dl | Format-Table Name, Length
 
       - name: Confirm the zip is the file that was uploaded

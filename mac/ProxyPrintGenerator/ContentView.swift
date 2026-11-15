@@ -92,6 +92,9 @@ struct ContentView: View {
                 StitchedEdgeOverlay()
             }
         }
+        #if os(macOS)
+        .modifier(UpdateSheets())
+        #endif
     }
 }
 
