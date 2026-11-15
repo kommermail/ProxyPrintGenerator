@@ -35,7 +35,7 @@ trap 'rm -rf "$build"' EXIT
 xcodebuild -project "$here/ProxyPrintGenerator.xcodeproj" \
     -scheme ProxyPrintGenerator -configuration Release \
     -destination 'generic/platform=macOS' \
-    -derivedDataPath "$build" build | grep -E "error:|BUILD" || true
+    -derivedDataPath "$build" build 2>&1 | grep -E "error:|BUILD" || true
 
 app="$build/Build/Products/Release/ProxyPrintGenerator.app"
 [[ -d $app ]] || { echo "Build failed: no ProxyPrintGenerator.app"; exit 1; }
