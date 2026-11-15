@@ -18,6 +18,16 @@
 param([switch] $Upload)
 
 $ErrorActionPreference = 'Stop'
+
+# Runs a gh command only for its exit code. Windows PowerShell turns
+# anything a program writes to stderr into an error when it's redirected,
+# which 'Stop' then makes fatal; "release not found" is a normal answer.
+function Test-Gh([string[]] $GhArgs) {
+    $old = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { & gh @GhArgs 2>&1 | Out-Null } finally { $ErrorActionPreference = $old }
+    return ($LASTEXITCODE -eq 0)
+}
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $version = ([xml](Get-Content "$here\ProxyPrintGenerator.csproj")).Project.PropertyGroup.Version | Select-Object -First 1
 $out = Join-Path $here "..\release\ProxyPrintGenerator"
@@ -25,8 +35,7 @@ $zip = Join-Path $here "..\release\ProxyPrintGenerator-$version-win-x64.zip"
 
 if ($Upload) {
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw "Install the GitHub CLI first: winget install GitHub.cli, then gh auth login" }
-    gh auth status *> $null
-    if ($LASTEXITCODE -ne 0) { throw "Sign in to GitHub first: gh auth login" }
+    if (-not (Test-Gh @('auth', 'status'))) { throw "Sign in to GitHub first: gh auth login" }
 }
 
 # A fresh output folder, so nothing from an older build ends up in the zip.
@@ -45,8 +54,7 @@ Write-Host ("SHA-256 " + (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvar
 if ($Upload) {
     $repo = 'kommermail/ProxyPrintGenerator'
     $tag = "v$version"
-    gh release view $tag -R $repo *> $null
-    if ($LASTEXITCODE -eq 0) {
+    if (Test-Gh @('release', 'view', $tag, '-R', $repo)) {
         gh release upload $tag $zip -R $repo --clobber
         if ($LASTEXITCODE -ne 0) { throw "Upload failed" }
         Write-Host "Attached to release ${tag}: https://github.com/$repo/releases/tag/$tag"
