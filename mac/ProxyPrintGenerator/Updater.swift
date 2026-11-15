@@ -530,7 +530,16 @@ nonisolated enum Updater {
         helper.executableURL = URL(fileURLWithPath: "/bin/sh")
         helper.arguments = ["-c", script, url.path]
         try? helper.run()
+        // An open sheet (the update or move window) keeps AppKit from
+        // quitting, which left the old copy running and the new one
+        // never opened. Close the sheets, ask to quit, and if the app is
+        // still here a moment later, exit: decks and settings are
+        // already saved, each time they change.
+        for window in NSApp.windows {
+            if let sheet = window.attachedSheet { window.endSheet(sheet) }
+        }
         NSApp.terminate(nil)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 1.5) { exit(0) }
     }
 
     /// At launch: removes anything a half finished update left.

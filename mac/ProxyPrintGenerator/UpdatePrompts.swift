@@ -63,6 +63,19 @@ final class UpdateController: ObservableObject {
             return
         }
         #endif
+        #if DEBUG
+        // Debug builds only: shows the move prompt, then clicks Move
+        // itself after two seconds, the way a person would.
+        if ProcessInfo.processInfo.environment["PPG_MOVE_CLICK_TEST"] != nil, AppMover.shouldOffer {
+            Task {
+                try? await Task.sleep(nanoseconds: 700_000_000)
+                offeringMove = true
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                moveToApplications()
+            }
+            return
+        }
+        #endif
         // A copy outside Applications offers to move there first: from
         // anywhere else it can't update itself.
         if AppMover.shouldOffer {
@@ -94,6 +107,7 @@ final class UpdateController: ObservableObject {
         moveError = nil
         do {
             let moved = try AppMover.move()
+            offeringMove = false
             Updater.relaunch(moved)
         } catch {
             moveError = error.localizedDescription

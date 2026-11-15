@@ -38,8 +38,10 @@ nonisolated enum AppMover {
 
     /// Already in /Applications or ~/Applications (or a folder inside one).
     static var isInApplications: Bool {
-        guard !isTranslocated else { return false }
-        let p = current.resolvingSymlinksInPath().path
+        // A copy macOS runs from a hidden spot counts by where it really
+        // is, so one already in Applications is never offered the move.
+        guard let real = isTranslocated ? originalLocation() : current else { return false }
+        let p = real.resolvingSymlinksInPath().path
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         return p.hasPrefix("/Applications/") || p.hasPrefix(home + "/Applications/")
     }
