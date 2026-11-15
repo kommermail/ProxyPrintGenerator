@@ -20,6 +20,9 @@ final class UpdateController: ObservableObject {
 
     /// The one time question is showing.
     @Published var askingPermission = false
+    /// The Move to Applications prompt is showing.
+    @Published var offeringMove = false
+    @Published var moveError: String?
     /// A newer version to offer.
     @Published var offer: UpdateInfo?
     @Published var checkAtStartup: Bool = UpdateSettings.load().checkAtStartup == true
@@ -42,6 +45,38 @@ final class UpdateController: ObservableObject {
             return
         }
         #endif
+        #if DEBUG
+        // Debug builds only: moves the app (into PPG_MOVE_TEST_DEST)
+        // with no clicks and logs each step, for testing.
+        if let log = ProcessInfo.processInfo.environment["PPG_MOVE_SELFTEST_LOG"] {
+            func write(_ line: String) {
+                let entry = "\(line)\n"
+                if let h = FileHandle(forWritingAtPath: log) {
+                    h.seekToEndOfFile(); h.write(Data(entry.utf8)); try? h.close()
+                } else { try? entry.write(toFile: log, atomically: true, encoding: .utf8) }
+            }
+            write("running from \(Bundle.main.bundleURL.path) translocated=\(AppMover.isTranslocated) offer=\(AppMover.shouldOffer)")
+            if AppMover.shouldOffer {
+                do { let moved = try AppMover.move(); write("moved to \(moved.path); relaunching"); Updater.relaunch(moved) }
+                catch { write("error: \(error.localizedDescription)") }
+            }
+            return
+        }
+        #endif
+        // A copy outside Applications offers to move there first: from
+        // anywhere else it can't update itself.
+        if AppMover.shouldOffer {
+            Task {
+                try? await Task.sleep(nanoseconds: 700_000_000)
+                offeringMove = true
+            }
+            return
+        }
+        continueStartup()
+    }
+
+    /// The update question and launch check, after the move prompt.
+    func continueStartup() {
         let settings = UpdateSettings.load()
         if settings.checkAtStartup == nil {
             Task {
@@ -52,6 +87,27 @@ final class UpdateController: ObservableObject {
         } else if settings.checkAtStartup == true {
             Task { await check(manual: false) }
         }
+    }
+
+    /// Moves the app into Applications and reopens it from there.
+    func moveToApplications() {
+        moveError = nil
+        do {
+            let moved = try AppMover.move()
+            Updater.relaunch(moved)
+        } catch {
+            moveError = error.localizedDescription
+        }
+    }
+
+    func declineMove(forever: Bool) {
+        if forever {
+            var s = UpdateSettings.load()
+            s.neverOfferMove = true
+            s.save()
+        }
+        offeringMove = false
+        continueStartup()
     }
 
     func setCheckAtStartup(_ on: Bool) {
@@ -144,12 +200,59 @@ struct UpdateSheets: ViewModifier {
     func body(content: Content) -> some View {
         content
             .onAppear { updates.onStartup() }
+            .sheet(isPresented: $updates.offeringMove) {
+                MoveToApplicationsSheet()
+            }
             .sheet(isPresented: $updates.askingPermission) {
                 UpdatePermissionSheet()
             }
             .sheet(item: $updates.offer) { info in
                 UpdateOfferSheet(info: info)
             }
+    }
+}
+
+private struct MoveToApplicationsSheet: View {
+    @ObservedObject private var updates = UpdateController.shared
+
+    private var folderName: String {
+        AppMover.destinationFolder.path == "/Applications"
+            ? "Applications" : AppMover.destinationFolder.path
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            PlaqueTitleText(text: "Move to \(folderName)?", size: 28)
+                .fixedSize()
+            note("ProxyPrintGenerator is running from \(AppMover.isTranslocated ? "your Downloads folder" : "outside your Applications folder"). From there it can't update itself, so every new version would mean downloading it again and approving it in System Settings.", 18)
+            note("Move it to \(folderName) and it reopens from there. After that, new versions install with one click, with no more approvals. The downloaded copy goes to the Trash; your decks and settings stay as they are.", 17)
+            if let error = updates.moveError {
+                note(error, 16)
+                    .foregroundStyle(Color(red: 1, green: 0.54, blue: 0.48))
+            }
+            HStack {
+                Button {
+                    updates.declineMove(forever: true)
+                } label: {
+                    Text("Don't ask again")
+                        .font(Theme.fellFont(size: 16))
+                        .underline()
+                        .foregroundStyle(Theme.parchment.opacity(0.75))
+                }
+                .buttonStyle(.plain)
+                Spacer()
+                Button("Not now") { updates.declineMove(forever: false) }
+                    .keyboardShortcut(.cancelAction)
+                Button("Move to \(folderName)") { updates.moveToApplications() }
+                    .keyboardShortcut(.defaultAction)
+            }
+            .font(Theme.fellFont(size: 17))
+            .padding(.top, 6)
+        }
+        .padding(24)
+        .frame(width: 620)
+        .background(LeatherBackground())
+        .interactiveDismissDisabled()
     }
 }
 
@@ -246,6 +349,17 @@ private struct UpdateOfferSheet: View {
             if !canInstall, !installing,
                let reason = Updater.cannotInstallReason {
                 note(reason, 15).opacity(0.7)
+                if !AppMover.isDevBuild, !AppMover.isInApplications {
+                    Button("Move to Applications, then update") {
+                        // Reopens from Applications, where the launch
+                        // check (or Check for updates) offers it again.
+                        updates.moveToApplications()
+                    }
+                    if let error = updates.moveError {
+                        note(error, 15)
+                            .foregroundStyle(Color(red: 1, green: 0.54, blue: 0.48))
+                    }
+                }
             }
 
             HStack {

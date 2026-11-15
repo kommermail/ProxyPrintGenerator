@@ -81,6 +81,8 @@ nonisolated struct UpdateInfo: Identifiable, Sendable {
 nonisolated struct UpdateSettings: Codable {
     var checkAtStartup: Bool?
     var skippedVersion: String?
+    /// "Don't ask again" on the Move to Applications prompt.
+    var neverOfferMove: Bool?
 
     private static var fileURL: URL {
         AppData.folder.appendingPathComponent("updates.json")

@@ -49,6 +49,7 @@ The Xcode project is the new folder-based format: new `.swift` files in `mac/Pro
 
 **Mac Debug-only self-tests** (launch with `open -n --env NAME=value <app>`, so the app is its own process and can read its data):
 - `PPG_UPDATE_SELFTEST_LOG=<file>`: logs a live update check; with `PPG_UPDATE_TEST_ZIP=<zip>` and `PPG_UPDATE_TEST_VERSION=<x.y.z>` it installs that local zip and relaunches, without GitHub.
+- `PPG_MOVE_SELFTEST_LOG=<file>` with `PPG_MOVE_TEST_DEST=<folder>`: runs Move to Applications with no clicks, into that folder instead of the real Applications folder, and logs where it ran from before and after.
 - `PPG_PRINT_SELFTEST_LOG=<file>`: logs every printer, its driver, presets and advice. Add `PPG_SETUP_SELFTEST=1` for the Set it up for me plan and the safety checks; `PPG_PRINT_HOLD=1` with `PPG_PRINT_SELFTEST_PDF=<pdf>` sends a job that waits on hold (cancel it with `cancel <job>`), so nothing prints.
 
 ## Versions and releases
