@@ -74,6 +74,12 @@ nonisolated struct MacPrinter: Identifiable, Hashable, Sendable {
     let quality: DriverOption?
     let pageSize: DriverOption?
     let duplex: DriverOption?
+    /// That driver's file, as CUPS lists it
+    /// (Library/Printers/PPDs/Contents/Resources/....ppd.gz).
+    var unusedMakerDriverPPD: String? = nil
+    /// Another printer entry for this same model that already uses
+    /// the maker's driver, by display name.
+    var makerDriverTwin: String? = nil
 
     static func == (a: MacPrinter, b: MacPrinter) -> Bool { a.id == b.id }
     func hash(into h: inout Hasher) { h.combine(id) }
@@ -129,11 +135,13 @@ nonisolated enum MacPrinting {
                 ?? model.components(separatedBy: " ").first ?? ""
             let kind = ppd.map(driverKind) ?? .unknown
             var unused: String? = nil
+            var unusedPPD: String? = nil
             if kind != .maker,
                let match = makerDrivers.first(where: {
                    $0.model.caseInsensitiveCompare(model) == .orderedSame
                }) {
                 unused = match.model
+                unusedPPD = match.path
             }
             out.append(MacPrinter(
                 id: name,
@@ -155,7 +163,16 @@ nonisolated enum MacPrinting {
                 quality: ppd?.option(matching: ["CNIJPrintQuality", "cupsPrintQuality", "EPIJ_Qual", "HPPrintQuality", "BRResolution", "OutputMode"],
                                      labelHint: ["quality"]),
                 pageSize: ppd?.options["PageSize"],
-                duplex: ppd?.options["Duplex"]))
+                duplex: ppd?.options["Duplex"],
+                unusedMakerDriverPPD: unusedPPD))
+        }
+        // A model already set up with the maker's driver elsewhere
+        // needs no setup, just choosing that printer.
+        for i in out.indices where out[i].unusedMakerDriver != nil {
+            out[i].makerDriverTwin = out.first {
+                $0.driver == .maker && !$0.isFax
+                    && $0.model.caseInsensitiveCompare(out[i].model) == .orderedSame
+            }?.displayName
         }
         return out
     }
@@ -360,7 +377,7 @@ nonisolated enum MacPrinting {
     /// Something the person should know about a printer before
     /// printing, with what to do about it.
     struct Advice: Identifiable {
-        enum Action { case openPrinterSettings, openURL(URL) }
+        enum Action { case openPrinterSettings, openURL(URL), setUpDriver, choose(String) }
         let id: String
         let text: String
         let isProblem: Bool
@@ -386,16 +403,24 @@ nonisolated enum MacPrinting {
         case (.maker, _):
             break
         case (_, let installed?):
-            out.append(Advice(
-                id: "readd",
-                text: "\(installed)'s own driver is installed on this Mac, but this printer was added with Apple's generic AirPrint driver, so it only offers basic paper types. Reinstalling the driver won't change that. In Printers & Scanners, remove the printer, click Add Printer, select it, and under Use pick \"\(installed)\" instead of AirPrint. Then choose the new printer here.",
-                isProblem: false, actionLabel: "Open Printers & Scanners",
-                action: .openPrinterSettings))
+            if let twin = p.makerDriverTwin {
+                out.append(Advice(
+                    id: "twin",
+                    text: "\(p.displayName) uses Apple's generic AirPrint driver, but \(twin) is the same printer set up with \(installed)'s own driver, which has the exact paper types. Print with that one.",
+                    isProblem: false, actionLabel: "Use \(twin)",
+                    action: .choose(twin)))
+            } else {
+                out.append(Advice(
+                    id: "readd",
+                    text: "\(installed)'s own driver is installed on this Mac, but this printer was added with Apple's generic AirPrint driver, so it only offers basic paper types. The app can add this printer again with \(p.maker)'s driver for you. Your current printer stays as it is.",
+                    isProblem: false, actionLabel: "Set it up for me",
+                    action: .setUpDriver))
+            }
         case (.airPrint, nil):
             if let url = makerDriverPage(p.maker) {
                 out.append(Advice(
                     id: "getdriver",
-                    text: "\(p.displayName) uses Apple's generic AirPrint driver. It prints fine, but \(p.maker)'s own driver adds the exact paper types (like matte photo paper) and finer quality. Download it from \(p.maker), install it, then re-add the printer and pick \(p.maker)'s driver under Use.",
+                    text: "\(p.displayName) uses Apple's generic AirPrint driver. It prints fine, but \(p.maker)'s own driver adds the exact paper types (like matte photo paper) and finer quality. Show me how walks you through getting it, or just print.",
                     isProblem: false,
                     actionLabel: "Find \(p.maker)'s driver",
                     action: .openURL(url)))
@@ -422,6 +447,246 @@ nonisolated enum MacPrinting {
         if let url = URL(string: "x-apple.systempreferences:com.apple.Print-Scanner-Settings.extension") {
             NSWorkspace.shared.open(url)
         }
+    }
+
+    // MARK: - Setting a printer up with its maker's driver
+
+    /// What "Set it up for me" will add: a new printer entry for the
+    /// same printer, on the connection macOS's own discovery found,
+    /// with the maker's driver from the Mac's driver folder.
+    struct DriverSetupPlan: Sendable {
+        let queueName: String
+        let displayName: String
+        let deviceURI: String
+        let ppd: String
+        let connection: String
+    }
+
+    /// A device CUPS's discovery (lpinfo -l -v) reported.
+    struct DiscoveredDevice: Sendable {
+        let uri: String
+        let makeAndModel: String
+        let info: String
+    }
+
+    /// Works out the setup for a printer added with AirPrint while
+    /// its maker's driver is installed. Every value comes from macOS
+    /// itself and must pass the same checks for every maker:
+    ///   - the connection is one discovery found for this exact model,
+    ///     over USB, standard network printing on the local network,
+    ///     or a connection type the maker's driver package installed
+    ///     in the system's protected printer folders;
+    ///   - the driver is one CUPS lists for this exact model, a file
+    ///     directly in /Library/Printers/PPDs/Contents/Resources that
+    ///     only the system can change.
+    static func planDriverSetup(for p: MacPrinter) throws -> DriverSetupPlan {
+        guard let ppd = p.unusedMakerDriverPPD,
+              let driverModel = p.unusedMakerDriver else {
+            throw PrintError(message: "No maker driver for \(p.model) is installed on this Mac.")
+        }
+        guard isSafeDriverPath(ppd) else {
+            throw PrintError(message: "The installed driver isn't in the Mac's protected driver folder, so the app won't use it. Set the printer up in Printers & Scanners instead.")
+        }
+        let devices = try discoverDevices()
+        let mine = devices.filter {
+            $0.makeAndModel.caseInsensitiveCompare(p.model) == .orderedSame
+                || $0.info.caseInsensitiveCompare(p.model) == .orderedSame
+        }
+        let ranked = mine.compactMap { d -> (Int, DiscoveredDevice, String)? in
+            guard let (rank, connection) = connectionRank(d.uri) else { return nil }
+            return (rank, d, connection)
+        }.sorted { $0.0 < $1.0 }
+        guard let (rank, device, generic) = ranked.first else {
+            throw PrintError(message: "The app couldn't find \(p.model) on a connection it can set up. Make sure the printer is on, then try again, or set it up in Printers & Scanners.")
+        }
+        // The maker's connection by the name its driver gives it
+        // ("Canon IJ Network"), as Printers & Scanners shows it.
+        var connection = generic
+        if rank == 0, let scheme = URL(string: device.uri)?.scheme,
+           let named = devices.first(where: { $0.uri == scheme })?.info,
+           !named.isEmpty {
+            connection = named
+        }
+        var name = safeQueueName(driverModel)
+        let taken = Set(printers().map(\.id))
+        var n = 2
+        let base = name
+        while taken.contains(name) { name = "\(base)_\(n)"; n += 1 }
+        return DriverSetupPlan(queueName: name, displayName: driverModel,
+                               deviceURI: device.uri, ppd: ppd,
+                               connection: connection)
+    }
+
+    /// Adds the printer: lpadmin with the plan's values as separate
+    /// arguments (no shell). macOS decides whether this account may
+    /// add printers; the app never asks for a password.
+    static func runDriverSetup(_ plan: DriverSetupPlan) throws {
+        guard isSafeDriverPath(plan.ppd), connectionRank(plan.deviceURI) != nil,
+              plan.queueName == safeQueueName(plan.queueName) else {
+            throw PrintError(message: "The setup didn't pass its safety checks, so nothing was added.")
+        }
+        let (status, output) = run("/usr/sbin/lpadmin", [
+            "-p", plan.queueName,
+            "-D", plan.displayName,
+            "-E",
+            "-v", plan.deviceURI,
+            "-m", plan.ppd,
+            "-o", "printer-is-shared=false",
+        ], timeout: 60)
+        guard status == 0 else {
+            let reason = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            if reason.lowercased().contains("forbidden")
+                || reason.lowercased().contains("password")
+                || reason.lowercased().contains("not authorized") {
+                throw PrintError(message: "This Mac account isn't allowed to add printers. An administrator can set it up in Printers & Scanners: Add Printer, select it, and under Use pick \(plan.displayName).")
+            }
+            throw PrintError(message: "macOS didn't add the printer\(reason.isEmpty ? "." : ": " + reason)")
+        }
+        // Check it took: the new entry must use the maker's driver.
+        guard let added = readPPD(queue: plan.queueName),
+              driverKind(added) == .maker else {
+            throw PrintError(message: "The printer was added but isn't using the maker's driver. Check it in Printers & Scanners.")
+        }
+    }
+
+    /// CUPS's own discovery of the printers it can reach.
+    static func discoverDevices() throws -> [DiscoveredDevice] {
+        let (status, text) = run("/usr/sbin/lpinfo", ["-l", "--timeout", "10", "-v"], timeout: 60)
+        guard status == 0 else {
+            throw PrintError(message: "macOS wouldn't list nearby printers for this account. An administrator can set the printer up in Printers & Scanners.")
+        }
+        return parseDevices(text)
+    }
+
+    static func parseDevices(_ text: String) -> [DiscoveredDevice] {
+        var out: [DiscoveredDevice] = []
+        var uri: String?
+        var fields: [String: String] = [:]
+        func flush() {
+            if let uri {
+                out.append(DiscoveredDevice(uri: uri,
+                                            makeAndModel: fields["make-and-model"] ?? "",
+                                            info: fields["info"] ?? ""))
+            }
+            uri = nil; fields = [:]
+        }
+        for line in text.split(separator: "\n").map(String.init) {
+            if line.hasPrefix("Device: uri = ") {
+                flush()
+                uri = String(line.dropFirst("Device: uri = ".count))
+            } else if let eq = line.range(of: " = ") {
+                let key = line[..<eq.lowerBound].trimmingCharacters(in: .whitespaces)
+                fields[key] = String(line[eq.upperBound...])
+            }
+        }
+        flush()
+        return out
+    }
+
+    /// Whether a device address is one the setup may use, and how
+    /// good it is (lower is better): the maker's own connection,
+    /// then USB, then standard network printing. Nil for anything
+    /// else. The same rule for every maker.
+    static func connectionRank(_ uri: String) -> (Int, String)? {
+        guard uri.count < 1024,
+              uri.unicodeScalars.allSatisfy({ $0.value > 0x20 && $0.value < 0x7f }),
+              let url = URL(string: uri), let scheme = url.scheme?.lowercased(),
+              url.host?.isEmpty == false
+        else { return nil }
+        switch scheme {
+        case "usb":
+            return (1, "USB")
+        case "dnssd":
+            // Bonjour names only ever point at the local network.
+            guard url.host?.hasSuffix(".local.") == true
+                    || url.host?.hasSuffix(".local") == true else { return nil }
+            return (2, "the network (Bonjour)")
+        case "ipp", "ipps", "http", "https", "socket", "lpd", "smb", "file":
+            return nil
+        default:
+            guard isMakerBackend(scheme) else { return nil }
+            return (0, "\(scheme) (the maker's own connection)")
+        }
+    }
+
+    /// A connection type a maker's driver package installed: CUPS's
+    /// backend for it is a link into /Library/Printers, and the file
+    /// it points to and every folder above it belong to the system
+    /// and can't be changed by other accounts.
+    static func isMakerBackend(_ scheme: String) -> Bool {
+        guard scheme.range(of: "^[a-z][a-z0-9+.-]{0,31}$", options: .regularExpression) != nil
+        else { return false }
+        let link = "/usr/libexec/cups/backend/\(scheme)"
+        let resolved = URL(fileURLWithPath: link).resolvingSymlinksInPath().path
+        guard resolved != link, resolved.hasPrefix("/Library/Printers/") else { return false }
+        return isSystemProtected(resolved)
+    }
+
+    /// A driver file directly in the Mac's printer driver folder,
+    /// given as CUPS lists it, that only the system can change.
+    static func isSafeDriverPath(_ ppd: String) -> Bool {
+        let folder = "Library/Printers/PPDs/Contents/Resources/"
+        guard ppd.hasPrefix(folder) else { return false }
+        let file = String(ppd.dropFirst(folder.count))
+        guard !file.isEmpty, !file.contains("/"), !file.hasPrefix("."),
+              file.range(of: #"^[A-Za-z0-9 _+.()-]+\.ppd(\.gz)?$"#, options: .regularExpression) != nil
+        else { return false }
+        return isSystemProtected("/" + ppd)
+    }
+
+    /// The path and every folder above it are owned by root and not
+    /// writable by group or others, and the path isn't a link.
+    private static func isSystemProtected(_ path: String) -> Bool {
+        let fm = FileManager.default
+        var current = path
+        var first = true
+        while current != "/" && !current.isEmpty {
+            guard let attrs = try? fm.attributesOfItem(atPath: current),
+                  (attrs[.ownerAccountID] as? NSNumber)?.intValue == 0,
+                  let perms = (attrs[.posixPermissions] as? NSNumber)?.intValue
+            else { return false }
+            if first, attrs[.type] as? FileAttributeType == .typeSymbolicLink { return false }
+            if perms & 0o022 != 0 {
+                // /Library/Printers is root:admin 775 on some Macs:
+                // allow group write only for the admin group above
+                // the driver itself.
+                let group = (attrs[.groupOwnerAccountID] as? NSNumber)?.intValue
+                if first || perms & 0o002 != 0 || group != 80 { return false }
+            }
+            first = false
+            current = (current as NSString).deletingLastPathComponent
+        }
+        return true
+    }
+
+    /// A CUPS queue name from a model: letters, digits and _.
+    static func safeQueueName(_ model: String) -> String {
+        let mapped = model.unicodeScalars.map {
+            CharacterSet.alphanumerics.contains($0) && $0.isASCII ? Character($0) : "_"
+        }
+        let name = String(mapped).replacingOccurrences(of: "__+", with: "_", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "_"))
+        return String((name.isEmpty ? "Printer" : name).prefix(100))
+    }
+
+    @discardableResult
+    static func run(_ tool: String, _ args: [String], timeout: TimeInterval) -> (Int32, String) {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: tool)
+        p.arguments = args
+        p.standardInput = FileHandle.nullDevice
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = pipe
+        guard (try? p.run()) != nil else { return (-1, "") }
+        let deadline = Date().addingTimeInterval(timeout)
+        DispatchQueue.global().async {
+            while p.isRunning && Date() < deadline { usleep(100_000) }
+            if p.isRunning { p.terminate() }
+        }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        return (p.terminationStatus, String(decoding: data, as: UTF8.self))
     }
 
     // MARK: - Send a job
@@ -472,6 +737,30 @@ nonisolated enum MacPrinting {
             out.append("  letter=\(p.pageSizeName(for: CGSize(width: 612, height: 792)) ?? "-") a4=\(p.pageSizeName(for: CGSize(width: 595.28, height: 841.89)) ?? "-")")
             out.append("  presets \(presets(for: p).map { "\($0.label)=\($0.media ?? "-")/\($0.quality ?? "-")" })")
             out.append("  advice \(advice(for: p).map(\.id))")
+        }
+        if env["PPG_SETUP_SELFTEST"] != nil {
+            for p in all where p.unusedMakerDriver != nil {
+                do {
+                    let plan = try planDriverSetup(for: p)
+                    out.append("plan for \(p.id): queue=\(plan.queueName) name=\(plan.displayName) via=\(plan.connection) uri=\(plan.deviceURI.prefix(40))… ppd=\(plan.ppd)")
+                } catch {
+                    out.append("plan for \(p.id): error \(error.localizedDescription)")
+                }
+            }
+            let uris = ["canonijnetwork://Canon/Canon%20MB5400%20series?x=1",
+                        "usb://Canon/MB5400%20series?serial=123",
+                        "dnssd://Canon%20MB5400%20series._ipp._tcp.local./?uuid=1",
+                        "dnssd://evil.example.com./", "ipp://10.0.0.5/ipp/print",
+                        "socket://10.0.0.5", "file:///etc/passwd", "evilbackend://x/y",
+                        "usb://Canon/MB5400 series", "canonijnetwork://Canon/a;rm -rf ~",
+                        "smb://host/share"]
+            for u in uris { out.append("uri \(u) -> \(connectionRank(u).map { "ok rank \($0.0) (\($0.1))" } ?? "refused")") }
+            let ppds = ["Library/Printers/PPDs/Contents/Resources/CanonIJMB5400series.ppd.gz",
+                        "Library/Printers/PPDs/Contents/Resources/../../../../tmp/x.ppd",
+                        "/tmp/evil.ppd", "Library/Printers/PPDs/Contents/Resources/sub/x.ppd",
+                        "Library/Printers/PPDs/Contents/Resources/Missing.ppd.gz", "drv:///sample.drv/generic.ppd"]
+            for d in ppds { out.append("ppd \(d) -> \(isSafeDriverPath(d) ? "ok" : "refused")") }
+            out.append("queue name: \(safeQueueName("Canon MB5400 series; rm -rf ~"))")
         }
         if let path = env["PPG_PRINT_SELFTEST_PPD"],
            let data = FileManager.default.contents(atPath: path) {

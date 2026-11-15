@@ -54,6 +54,10 @@ struct MacPrintSheet: View {
     @State private var preview: NSImage?
     @State private var sending = false
     @State private var errorText: String?
+    @State private var setupStatus: String?
+    @State private var setupPlan: MacPrinting.DriverSetupPlan?
+    @State private var confirmSetup = false
+    @State private var showGuide = false
 
     private var choosable: [MacPrinter] { printers.filter { !$0.isFax } }
     private var printer: MacPrinter? { printers.first { $0.id == printerID } }
@@ -73,8 +77,11 @@ struct MacPrintSheet: View {
                             ProgressView("Asking your printers…")
                         } else if choosable.isEmpty {
                             line("No printers are set up on this Mac. Add one in Printers & Scanners.", 17)
-                            Button("Open Printers & Scanners") {
-                                MacPrinting.openPrinterSettings()
+                            HStack {
+                                Button("Open Printers & Scanners") {
+                                    MacPrinting.openPrinterSettings()
+                                }
+                                Button("Show me how") { showGuide = true }
                             }
                         } else {
                             settings
@@ -93,6 +100,23 @@ struct MacPrintSheet: View {
         .frame(width: 820, height: 640)
         .background(LeatherBackground())
         .task { await load() }
+        .sheet(isPresented: $showGuide) {
+            PrinterSetupGuide(
+                printer: printer,
+                recheck: { await recheckPrinter() },
+                setUpForMe: {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        Task { await planSetup() }
+                    }
+                })
+        }
+        .alert("Set up \(setupPlan?.displayName ?? "the printer")?",
+               isPresented: $confirmSetup, presenting: setupPlan) { plan in
+            Button("Add printer") { Task { await runSetup(plan) } }
+            Button("Cancel", role: .cancel) { setupStatus = nil }
+        } message: { plan in
+            Text("The app will add \(plan.displayName) as a new printer, using \(plan.displayName)'s own driver over \(plan.connection). Your current printer stays as it is, and your default printer doesn't change.")
+        }
     }
 
     // MARK: - Pieces
@@ -222,11 +246,27 @@ struct MacPrintSheet: View {
         VStack(alignment: .leading, spacing: 6) {
             line(a.text, 15.5)
             if let label = a.actionLabel, let action = a.action {
-                Button(label) {
-                    switch action {
-                    case .openPrinterSettings: MacPrinting.openPrinterSettings()
-                    case .openURL(let url): openURL(url)
+                HStack(spacing: 10) {
+                    Button(label) {
+                        switch action {
+                        case .openPrinterSettings: MacPrinting.openPrinterSettings()
+                        case .openURL(let url): openURL(url)
+                        case .setUpDriver: Task { await planSetup() }
+                        case .choose(let name):
+                            if let p = printers.first(where: { $0.displayName == name }) {
+                                printerID = p.id
+                                choosePaper(for: p, memory: MacPrintMemory.load())
+                            }
+                        }
                     }
+                    .disabled(setupStatus != nil)
+                    if a.id == "readd" || a.id == "getdriver" {
+                        Button("Show me how") { showGuide = true }
+                            .help("A short, skippable guide to everything done outside the app")
+                    }
+                }
+                if case .setUpDriver = action, let setupStatus {
+                    line(setupStatus, 15).opacity(0.85)
                 }
             }
         }
@@ -365,6 +405,51 @@ struct MacPrintSheet: View {
                 sending = false
                 errorText = error.localizedDescription
             }
+        }
+    }
+
+    /// The guide's Check again: re-read the printers, keep the same
+    /// one chosen, and hand it back fresh.
+    private func recheckPrinter() async -> MacPrinter? {
+        let found = await Task.detached { MacPrinting.printers() }.value
+        printers = found
+        return found.first { $0.id == printerID }
+    }
+
+    /// Set it up for me: find the printer and work out the setup,
+    /// then ask before adding anything.
+    private func planSetup() async {
+        guard let p = printer else { return }
+        setupStatus = "Looking for \(p.model) on your network and USB…"
+        errorText = nil
+        do {
+            setupPlan = try await Task.detached {
+                try MacPrinting.planDriverSetup(for: p)
+            }.value
+            setupStatus = "Found it over \(setupPlan!.connection)."
+            confirmSetup = true
+        } catch {
+            setupStatus = nil
+            errorText = error.localizedDescription
+        }
+    }
+
+    private func runSetup(_ plan: MacPrinting.DriverSetupPlan) async {
+        setupStatus = "Adding \(plan.displayName)…"
+        do {
+            try await Task.detached { try MacPrinting.runDriverSetup(plan) }.value
+            let found = await Task.detached { MacPrinting.printers() }.value
+            printers = found
+            if let added = found.first(where: { $0.id == plan.queueName }) {
+                printerID = added.id
+                choosePaper(for: added, memory: MacPrintMemory.load())
+            }
+            setupStatus = nil
+            MacPrintMemory(printer: plan.queueName, preset: nil,
+                           media: nil, quality: nil).save()
+        } catch {
+            setupStatus = nil
+            errorText = error.localizedDescription
         }
     }
 

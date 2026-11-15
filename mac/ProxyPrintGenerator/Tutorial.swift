@@ -144,6 +144,7 @@ struct TutorialSheet: View {
                         "**Scale:** 600 is right for home printers. Save 1200 or 1800 for a print shop.",
                         "Click the **POP!** realism sticker to turn on auto vibrance. It adds vibrance and lifts the midtones, so cards print bright and punchy instead of dull.",
                         "Pick your **Paper** size. If a card edge gets cut off, open **Print options** and set **Safe area** to **Fit to my printer**.",
+                        "Want your printer maker's exact paper types, like matte photo paper? The print window's **Printer setup guide** walks you through it in a few minutes. It's optional; everything prints fine without it.",
                     ])
                     step(5, "Build and print", [
                         "Click **Build PDF**, then **Print**. The app always prints at actual size, so every card comes out true to size.",
