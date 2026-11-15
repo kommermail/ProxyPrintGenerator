@@ -1,0 +1,81 @@
+1 Calamity, Galloping Inferno (pl26) 4
+1 Huatli, Poet of Unity (lci) 189
+1 Fortune, Loyal Steed (otj) 12
+1 Dracosaur Auxiliary (dft) 122
+1 Seraphic Steed (otj) 232
+1 Drover Grizzly (otj) 161
+1 Battlefield Forge (bro) 257
+1 Bountiful Promenade (clb) 348
+1 Brushland (bro) 259
+1 Canopy Vista (moc) 393
+1 Cinder Glade (moc) 395
+1 Command Tower (moc) 396
+1 Evolving Wilds (moc) 397
+1 Sunpetal Grove (xln) 257
+1 Terramorphic Expanse (moc) 439
+1 Jungle Shrine (moc) 408
+1 Karplusan Forest (dmu) 250
+1 Overgrown Farmland (mid) 265
+1 Rockfall Vale (mid) 266
+1 Rootbound Crag (xln) 256
+1 Spire Garden (clb) 361
+1 Dinosaur Egg (lcc) 92
+1 Gert and Old Lace, Runaways (msc) 568
+1 Siegehorn Ceratops (rix) 171
+1 Territorial Hammerskull (plst) XLN-41
+1 District Mascot (dft) 158
+1 Unswerving Sloth (dft) 34
+1 Brightfield Glider (dft) 4
+1 Krovod Haunch (mkm) 21
+1 Three Bowls of Porridge (woe) 253
+1 Aberrant Manawurm (sos) 138
+1 Etali, Primal Storm (fdn) 194
+1 Master of Ceremonies (ncc) 18
+1 Tlincalli Hunter // Retrieve Prey (clb) 682
+1 Thunderhead Gunner (dft) 148
+1 Jaws, Relentless Predator (sld) 2175
+1 Ghalta the Unstoppable (fra) 260
+1 Return to the Light Realms (fra) 20
+1 Pia, Aether Ascetic (fra) 264
+1 Earthshaker Dreadmaw (lci) 183
+1 Hulking Raptor (fdc) 210
+1 Gishath, Sun's Avatar (lci) 229
+1 Animal Attendant (tle) 128
+1 Birds of Paradise (msc) 170
+1 Arbor Adherent (tdc) 42
+1 Beastcaller Savant (bfz) 170
+1 The Skullspore Nexus (lci) 212
+1 Lifecrafter's Bestiary (mkc) 231
+8 Plains (mom) 277
+4 Mountain (mdd) 298
+10 Forest (mom) 281
+1 Frilled Deathspitter (plst) RIX-104
+1 Hunting Velociraptor (rex) 30
+1 Tolsimir, Friend to Wolves (plst) WAR-224
+1 Cultivate (sld) 2679
+1 Nature's Lore (msc) 177
+1 Sol Ring (slc) 19
+1 Arcane Signet (fic) 333
+1 Aang's Defense (tle) 266
+1 Accelerate (tor) 90
+1 Dazzling Beauty (mir) 8
+1 Evasive Maneuvers (trc) 132
+1 Lace with Moonglove (cn2) 184
+1 Generous Gift (msc) 133
+1 Chaos Warp (pip) 466
+1 Swords to Plowshares (pip) 173
+1 Austere Command (msc) 121
+1 Vanquish the Horde (sld) 1353
+1 Selfless Savior (m21) 36
+1 Boros Charm (sld) 1771
+1 Regisaur Alpha (lcc) 286
+1 Trumpeting Carnosaur (lci) 171
+1 Heroic Intervention (pip) 202
+1 Eternal Witness (m3c) 227
+1 Guardian Sunmare (dft) 15
+1 Rishkar's Expertise (fdc) 226
+1 Garruk's Uprising (ecc) 109
+1 Elemental Bond (tdc) 254
+1 Guardian Project (pip) 199
+1 Return of the Wildspeaker (ecc) 115
+1 Regal Imperiosaur (dft) 389
