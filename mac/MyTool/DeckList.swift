@@ -33,13 +33,13 @@
 
 import Foundation
 
-public enum DeckBoard: Equatable {
+public nonisolated enum DeckBoard: Equatable {
     case main
     case sideboard
     case maybeboard
 }
 
-public struct DeckEntry: Equatable {
+public nonisolated struct DeckEntry: Equatable {
     public var quantity: Int
     public var name: String
     /// Lowercase Scryfall set code, when the line named a printing.
@@ -63,12 +63,12 @@ public struct DeckEntry: Equatable {
     public var hasPrinting: Bool { setCode != nil && collectorNumber != nil }
 }
 
-public struct DeckParseResult {
+public nonisolated struct DeckParseResult {
     public var entries: [DeckEntry]
     public var warnings: [String]
 }
 
-public enum DeckList {
+public nonisolated enum DeckList {
 
     public static func parseFile(at url: URL) throws -> DeckParseResult {
         let text = try String(contentsOf: url, encoding: .utf8)

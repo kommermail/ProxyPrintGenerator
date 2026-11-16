@@ -46,6 +46,41 @@ final class UpdateController: ObservableObject {
         }
         #endif
         #if DEBUG
+        // Debug builds only: runs a small real build and logs how often
+        // the main thread got to run meanwhile (a frozen window scores
+        // near zero) and the progress stages it saw.
+        if let log = ProcessInfo.processInfo.environment["PPG_BUILD_SELFTEST_LOG"] {
+            Task { @MainActor in
+                var ticks = 0
+                let timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+                    MainActor.assumeIsolated { ticks += 1 }
+                }
+                let model = PrintJobModel()
+                model.deckText = "1 Sol Ring\n1 Lightning Bolt\n1 Counterspell\n1 Llanowar Elves\n1 Swords to Plowshares\n1 Dark Ritual\n1 Giant Growth\n1 Brainstorm\n1 Path to Exile\n1 Island"
+                model.scale = 2
+                model.format = .pdf
+                model.outputName = "ppg-build-selftest"
+                let start = Date()
+                var stages: [String] = []
+                model.start()
+                while model.isRunning || (model.result == nil && model.errorText == nil) {
+                    let entry = "\(model.stageText) \(Int(model.fraction * 100))%"
+                    if stages.last != entry { stages.append(entry) }
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                    if Date().timeIntervalSince(start) > 300 { break }
+                }
+                timer.invalidate()
+                let elapsed = Date().timeIntervalSince(start)
+                let lines = [
+                    String(format: "elapsed %.1fs, main-thread ticks %d (about %d if never blocked)", elapsed, ticks, Int(elapsed * 10)),
+                    "result: \(model.result?.outputURL.lastPathComponent ?? "none") error: \(model.errorText ?? "none")",
+                    "progress seen (\(stages.count) distinct): " + stages.prefix(40).joined(separator: " | "),
+                ]
+                if let url = model.result?.outputURL { try? FileManager.default.removeItem(at: url) }
+                try? (lines.joined(separator: "\n") + "\n").write(toFile: log, atomically: true, encoding: .utf8)
+            }
+            return
+        }
         // Debug builds only: moves the app (into PPG_MOVE_TEST_DEST)
         // with no clicks and logs each step, for testing.
         if let log = ProcessInfo.processInfo.environment["PPG_MOVE_SELFTEST_LOG"] {

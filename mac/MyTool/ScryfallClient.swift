@@ -18,7 +18,7 @@
 
 import Foundation
 
-public enum ScryfallClientError: Error, CustomStringConvertible {
+public nonisolated enum ScryfallClientError: Error, CustomStringConvertible {
     case message(String)
     /// A download the app refuses to use: not Scryfall, not
     /// HTTPS, or far too big. Never retried.
@@ -53,7 +53,7 @@ public nonisolated struct PrintingKey: Hashable, Sendable {
     }
 }
 
-public struct ScryfallCard: Decodable {
+public nonisolated struct ScryfallCard: Decodable {
     public var name: String
     public var set: String
     public var collectorNumber: String
@@ -90,7 +90,7 @@ public struct ScryfallCard: Decodable {
 /// request passes through here, so this is also where the app makes
 /// sure it only ever talks to Scryfall over HTTPS and never takes in
 /// more than it can safely hold.
-public enum ScryfallTransport {
+public nonisolated enum ScryfallTransport {
 
     /// Larger than any Scryfall reply or card PNG by a wide
     /// margin.
@@ -198,7 +198,7 @@ public enum ScryfallTransport {
     }
 }
 
-public final class ScryfallClient {
+public nonisolated final class ScryfallClient {
 
     /// Layouts that truly print a back face. Adventure, split, and saga
     /// cards print from their top level image on one side only.

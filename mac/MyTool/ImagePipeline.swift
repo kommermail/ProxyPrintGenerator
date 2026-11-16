@@ -21,7 +21,7 @@ import CoreImage
 import ImageIO
 
 /// 8 bit RGB color, channels 0...255, as in the Python script.
-public struct RGBColor: Equatable {
+public nonisolated struct RGBColor: Equatable {
     public var r: Int
     public var g: Int
     public var b: Int
@@ -37,7 +37,7 @@ public struct RGBColor: Equatable {
 
 /// Per channel ink compensation. A factor above 1 deepens that ink's
 /// channel to make up for a weak cartridge.
-public struct InkCalibration: Equatable {
+public nonisolated struct InkCalibration: Equatable {
     public var cyan: Double
     public var magenta: Double
     public var yellow: Double
@@ -60,7 +60,7 @@ public struct InkCalibration: Equatable {
     }
 }
 
-public struct PreparedFace {
+public nonisolated struct PreparedFace {
     /// Fully processed (upscaled + calibrated) image, ready to draw.
     public var image: CGImage
     /// The card's sampled border color, NOT yet calibration boosted;
@@ -68,7 +68,7 @@ public struct PreparedFace {
     public var borderColor: RGBColor
 }
 
-public enum ImagePipelineError: Error, CustomStringConvertible {
+public nonisolated enum ImagePipelineError: Error, CustomStringConvertible {
     case message(String)
     public var description: String {
         switch self {
@@ -77,7 +77,7 @@ public enum ImagePipelineError: Error, CustomStringConvertible {
     }
 }
 
-public final class ImagePipeline {
+public nonisolated final class ImagePipeline {
 
     private let cacheDirectory: URL
     private let calibration: InkCalibration

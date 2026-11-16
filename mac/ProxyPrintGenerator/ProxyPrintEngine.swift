@@ -15,7 +15,7 @@
 
 import Foundation
 
-public struct PrintProgress: Sendable {
+public nonisolated struct PrintProgress: Sendable {
     public var stage: String
     public var done: Int
     public var total: Int
@@ -24,7 +24,7 @@ public struct PrintProgress: Sendable {
     }
 }
 
-public struct PrintJobResult {
+public nonisolated struct PrintJobResult {
     public var outputURL: URL
     public var frontCount: Int
     public var backCount: Int
@@ -45,7 +45,7 @@ public struct PrintJobResult {
 /// What a build produces: the classic printable PDF, or the
 /// pages as images packed into a zip (PNG at full quality,
 /// JPEG when a small file matters more).
-public enum OutputFormat: String, CaseIterable, Hashable, Sendable {
+public nonisolated enum OutputFormat: String, CaseIterable, Hashable, Sendable {
     case pdf
     case png
     case jpeg
@@ -69,13 +69,13 @@ public enum OutputFormat: String, CaseIterable, Hashable, Sendable {
     }
 }
 
-private struct FaceSource {
+private nonisolated struct FaceSource {
     var url: URL
     var set: String
     var collector: String
 }
 
-public enum ProxyPrintEngine {
+public nonisolated enum ProxyPrintEngine {
 
     /// Where prepared card faces are cached between runs. Lives in the
     /// system caches folder; the system may purge it under storage
@@ -86,6 +86,11 @@ public enum ProxyPrintEngine {
         return caches.appendingPathComponent("ProxyPrintCache")
     }
 
+    /// Runs on a background thread (@concurrent), never the main one:
+    /// image work and PDF writing on the main thread froze the window,
+    /// so the progress bar sat still and then flashed to done (Nov 16,
+    /// 2026). Progress reaches the window through the callback.
+    @concurrent
     public static func run(
         deckText: String,
         outputURL: URL,

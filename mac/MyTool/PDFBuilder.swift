@@ -35,7 +35,7 @@ public let pointsPerMM: Double = 72.0 / 25.4
 public let cardWidthPoints: Double = 63 * pointsPerMM
 public let cardHeightPoints: Double = 88 * pointsPerMM
 public let cardCornerRadiusPoints: Double = 3 * pointsPerMM
-public enum PaperSize: Hashable, Sendable {
+public nonisolated enum PaperSize: Hashable, Sendable {
     case letter
     case a4
     case legal
@@ -86,7 +86,7 @@ public enum PaperSize: Hashable, Sendable {
 /// layout can promise that no card edge ever lands where
 /// the printer cannot reach. Floors are the closest a card
 /// edge may sit to each side of the sheet, in millimeters.
-public enum SafeAreaProfile: String, CaseIterable, Sendable {
+public nonisolated enum SafeAreaProfile: String, CaseIterable, Sendable {
     case none
     case canonInkjet
 
@@ -110,7 +110,7 @@ public enum SafeAreaProfile: String, CaseIterable, Sendable {
 /// (Fit to my printer). The layout widens the reach by
 /// a millimeter of paper feed tolerance before using
 /// it as floors; see PrintSettings.effectiveFloors.
-public struct PrinterMargins: Hashable, Sendable {
+public nonisolated struct PrinterMargins: Hashable, Sendable {
     public var top: Double
     public var bottom: Double
     public var left: Double
@@ -125,7 +125,7 @@ public struct PrinterMargins: Hashable, Sendable {
     }
 }
 
-public struct PrintSettings {
+public nonisolated struct PrintSettings {
     public var paper: PaperSize = .letter
     /// The grid the chosen paper holds.
     public var columns: Int {
@@ -278,7 +278,7 @@ public struct PrintSettings {
 // MARK: - Proxy marks
 
 /// What kind of proxy mark a build draws on every face.
-public enum ProxyMarkKind: String, CaseIterable, Sendable {
+public nonisolated enum ProxyMarkKind: String, CaseIterable, Sendable {
     case none
     case label
     case border
@@ -287,7 +287,7 @@ public enum ProxyMarkKind: String, CaseIterable, Sendable {
 
 /// Where on the art a label or logo sits: the nine spots
 /// of a three by three grid inside the art window.
-public enum MarkPosition: Int, CaseIterable, Sendable {
+public nonisolated enum MarkPosition: Int, CaseIterable, Sendable {
     case topLeft = 0
     case top
     case topRight
@@ -301,7 +301,7 @@ public enum MarkPosition: Int, CaseIterable, Sendable {
 
 /// The lettering of the PROXY label: only the fonts the
 /// app ships.
-public enum MarkFont: String, CaseIterable, Sendable {
+public nonisolated enum MarkFont: String, CaseIterable, Sendable {
     case cinzel
     case cinzelDecorative
     case fellEnglish
@@ -325,7 +325,7 @@ public enum MarkFont: String, CaseIterable, Sendable {
 /// One proxy mark: what it is, its color (as chosen,
 /// before ink calibration), where it sits, how wide a
 /// border band is, and the label's lettering.
-public struct ProxyMark: Equatable, Sendable {
+public nonisolated struct ProxyMark: Equatable, Sendable {
     public var kind: ProxyMarkKind
     public var color: RGBColor
     public var position: MarkPosition
@@ -355,7 +355,7 @@ public struct ProxyMark: Equatable, Sendable {
 /// white, or dark when the mark color is light, so it
 /// reads on busy art. A border band fills the card edge
 /// inward; its inner corners round at 1mm.
-enum ProxyMarkDrawing {
+nonisolated enum ProxyMarkDrawing {
 
     private static let artX = 5.0
     private static let artY = 10.5
@@ -686,7 +686,7 @@ enum ProxyMarkDrawing {
 }
 
 /// Identifies one face of one printing.
-public struct FaceRef: Hashable {
+public nonisolated struct FaceRef: Hashable {
     public var cardKey: String
     public var faceIndex: Int
     public init(set: String, collectorNumber: String, faceIndex: Int) {
@@ -697,7 +697,7 @@ public struct FaceRef: Hashable {
 
 /// The page plan: which faces land in which slots, computed before any
 /// image work so the builder can assemble page by page.
-public struct LayoutPlan {
+public nonisolated struct LayoutPlan {
     /// Front faces per page, in slot order (slot = row * columns + col).
     public var pages: [[FaceRef]]
     /// Back faces by page index, then slot.
@@ -821,7 +821,7 @@ public struct LayoutPlan {
 /// Anything that assembles pages card by card: the PDF builder,
 /// or the page image builder, which renders the same pages to
 /// images and packs them into a zip instead.
-protocol PageBuilding: AnyObject {
+nonisolated protocol PageBuilding: AnyObject {
     var onFaceDrawn: ((_ placed: Int, _ total: Int) -> Void)? { get set }
     var onPageFinished: ((_ page: Int, _ totalPages: Int) -> Void)? { get set }
     /// Set when a step failed quietly (the page assembly calls do
@@ -835,12 +835,12 @@ protocol PageBuilding: AnyObject {
 }
 
 /// Page image encodings for the image builder.
-enum PageImageFormat {
+nonisolated enum PageImageFormat {
     case png
     case jpeg
 }
 
-public enum PDFBuilderError: Error, CustomStringConvertible {
+public nonisolated enum PDFBuilderError: Error, CustomStringConvertible {
     case message(String)
     public var description: String {
         switch self {
@@ -849,7 +849,7 @@ public enum PDFBuilderError: Error, CustomStringConvertible {
     }
 }
 
-public final class PDFBuilder: PageBuilding {
+public nonisolated final class PDFBuilder: PageBuilding {
 
     public var onFaceDrawn: ((_ placed: Int, _ total: Int) -> Void)?
     public var onPageFinished: ((_ page: Int, _ totalPages: Int) -> Void)?
@@ -976,7 +976,7 @@ public final class PDFBuilder: PageBuilding {
 /// quality when a small file matters more, its pages packed
 /// into a zip. Pages render one at a time, so memory stays
 /// flat like the PDF path either way.
-final class ImagePageBuilder: PageBuilding {
+nonisolated final class ImagePageBuilder: PageBuilding {
 
     var onFaceDrawn: ((_ placed: Int, _ total: Int) -> Void)?
     var onPageFinished: ((_ page: Int, _ totalPages: Int) -> Void)?
@@ -1590,7 +1590,7 @@ final class ImagePageBuilder: PageBuilding {
 
 /// Writes a chunked PNG by hand: signature first (written by
 /// the caller), then length + type + data + CRC per chunk.
-private struct PNGChunkWriter {
+private nonisolated struct PNGChunkWriter {
     var handle: FileHandle
 
     static let crcTable: [UInt32] = (0..<256).map { n in
@@ -1637,7 +1637,7 @@ private struct PNGChunkWriter {
 /// tracks over everything fed, after. Reference type on
 /// purpose, so the stitch loop can hand it buffers
 /// without closure capture trouble.
-private final class PNGCompressor {
+private nonisolated final class PNGCompressor {
     // Built inside init: this SDK imports the C stream
     // struct with non optional pointer fields, so it cannot
     // start life as nils. It is pointed at the scratch
@@ -1746,7 +1746,7 @@ private final class PNGCompressor {
 /// counting the bytes out and running the same Adler-32,
 /// so the finished file can be proved against its own
 /// trailer without ever holding the picture.
-private final class PNGInflater {
+private nonisolated final class PNGInflater {
     private var stream: compression_stream
     private let scratch: UnsafeMutablePointer<UInt8>
     private let scratchSize = 1 << 18
@@ -1847,7 +1847,7 @@ private final class PNGInflater {
 /// Files are read from disk in chunks, first for their checksum
 /// and then again into the archive, so packing stays flat in
 /// memory no matter how large the pages are.
-struct ZipArchiveWriter {
+nonisolated struct ZipArchiveWriter {
 
     private var handle: FileHandle
     private var offset: UInt64 = 0
