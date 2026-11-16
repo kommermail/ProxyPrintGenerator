@@ -789,14 +789,12 @@ nonisolated enum MacPrinting {
         if p.duplex != nil { o["Duplex"] = s.duplex ? "DuplexNoTumble" : "None" }
         if let k = p.mediaType?.keyword, let media { o[k] = media }
         if let k = p.quality?.keyword, let quality { o[k] = quality }
-        // The paper source: the one chosen, else the cassette the printer
-        // says holds this paper, never Auto Select by default. (Canon's
-        // MB5400 has a plain-paper-only cassette 2; on Auto, a Pro Luster
-        // job was matched against it: "the paper in the printer is
-        // different from the setting requested".)
-        if let k = p.paperSource?.keyword, let chosen = source ?? p.source(holding: media) {
-            o[k] = chosen
-        }
+        // The paper source: the one chosen in the print window, else the
+        // driver's own default (Canon: Cassette (Auto Select)), which is
+        // what Preview sends. Picking cassette 1 by itself made the job
+        // differ from Preview's working one in that one setting, and the
+        // printer reported a mismatch (Nov 16, 2026).
+        if let k = p.paperSource?.keyword, let source { o[k] = source }
         // Canon's drivers take their own settings from a job only when
         // it says they came from Canon's print dialog, which every job
         // from that dialog does (CNIJPDEEnable 1, in Canon's saved

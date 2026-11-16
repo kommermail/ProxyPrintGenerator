@@ -198,7 +198,7 @@ struct MacPrintSheet: View {
                     }
                     .labelsHidden()
                     .frame(width: 300)
-                    .help("Which cassette the paper comes from. The app picks the one your printer says holds this paper.")
+                    .help("Which cassette the paper comes from. Auto Select lets the printer pick the cassette set for this paper.")
                 }
                 if let note = trayNote(printer) {
                     line(note, 15)
@@ -403,16 +403,14 @@ struct MacPrintSheet: View {
         if let q = memory.quality, p.quality?.choices.contains(where: { $0.value == q }) == true {
             quality = q
         }
-        if let tray = p.source(holding: media) { source = tray }
     }
 
     /// A paper picked from the list: that paper, at the driver's best
-    /// quality (the quality list can still change it), from the cassette
-    /// the printer says holds it.
+    /// quality (the quality list can still change it). The paper source
+    /// stays on the driver's default (Auto Select), as Preview sends it.
     private func pickPaper(_ value: String?, on p: MacPrinter) {
         media = value
         if let best = MacPrinting.bestQuality(p.quality) { quality = best }
-        if let tray = p.source(holding: value) { source = tray }
     }
 
     /// What the printer says its cassettes hold, against the chosen paper.
