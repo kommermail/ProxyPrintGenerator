@@ -394,7 +394,10 @@ struct MacPrintSheet: View {
     /// The printer's own defaults, then the paper and quality used last
     /// time, when this printer offers them.
     private func choosePaper(for p: MacPrinter, memory: MacPrintMemory) {
-        media = p.mediaType?.defaultValue
+        // Plain paper unless a paper was picked before: most prints are
+        // on plain paper, whatever the driver's own default is (AirPrint
+        // drivers default to "Any").
+        media = MacPrinting.plainPaper(p.mediaType) ?? p.mediaType?.defaultValue
         quality = p.quality?.defaultValue
         source = p.paperSource?.defaultValue
         if let m = memory.media, p.mediaType?.choices.contains(where: { $0.value == m }) == true {

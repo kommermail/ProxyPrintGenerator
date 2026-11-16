@@ -406,6 +406,15 @@ nonisolated enum MacPrinting {
         return list
     }
 
+    /// The driver's plain paper choice: "Plain Paper" (Canon and most
+    /// maker drivers) or "stationery" (AirPrint).
+    static func plainPaper(_ option: DriverOption?) -> String? {
+        guard let choices = option?.choices else { return nil }
+        return choices.first { $0.label.lowercased().contains("plain") }?.value
+            ?? choices.first { $0.value.lowercased() == "stationery" }?.value
+            ?? choices.first { $0.value.lowercased().contains("plain") }?.value
+    }
+
     /// A tip for papers we know, shown under the Paper list (the same
     /// tips as the Windows build).
     static func paperHint(_ label: String) -> String? {
@@ -446,6 +455,81 @@ nonisolated enum MacPrinting {
             }) { return c.value }
         }
         return nil
+    }
+
+    /// The settings this printer maker's own print dialog sends, from
+    /// what macOS saved when that dialog was last used on this Mac, kept
+    /// to this printer's own driver settings. Every maker's dialog saves
+    /// them the same way, so this works for any maker:
+    ///   1. this printer's last used settings (macOS keeps them per
+    ///      printer, after any print from Apple's dialog);
+    ///   2. the maker dialog's own defaults macOS keeps;
+    ///   3. for Canon inkjets, the settings of a known good Canon job.
+    /// Nil when there's none: the print window's choices go on their own.
+    static func dialogSettings(for p: MacPrinter) -> (settings: [String: String], source: String)? {
+        let prefs = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Preferences")
+        func read(_ file: String) -> [String: Any]? {
+            NSDictionary(contentsOf: prefs.appendingPathComponent(file)) as? [String: Any]
+        }
+        if let last = read("com.apple.print.custompresets.forprinter.\(p.id).plist")?["com.apple.print.v2.lastUsedSettingsPref"] as? [String: Any] {
+            let kept = driverSettings(last, for: p)
+            if hasMakerSettings(kept, for: p) { return (kept, "this printer's last used dialog settings") }
+        }
+        if let vendor = (read("com.apple.print.custompresets.plist")?["vendorDefaultSettings"] as? [String: Any])?["com.apple.print.preset.settings"] as? [String: Any] {
+            let kept = driverSettings(vendor, for: p)
+            if hasMakerSettings(kept, for: p) { return (kept, "the maker dialog's saved defaults") }
+        }
+        if p.driverDefaults.keys.contains(where: { $0.hasPrefix("CNIJ") }) {
+            return (canonDialogSettings, "known good Canon settings")
+        }
+        return nil
+    }
+
+    /// The prefixes a maker puts on its own driver settings, from the
+    /// driver's option names: "CNIJ" (Canon), "EPIJ" (Epson), "HP", "BR"
+    /// (Brother)... Standard names (PageSize, ColorModel) have none.
+    static func makerPrefixes(_ p: MacPrinter) -> Set<String> {
+        var out = Set<String>()
+        for key in p.driverDefaults.keys {
+            let chars = Array(key)
+            var n = 0
+            while n < chars.count, chars[n].isUppercase || chars[n] == "_" { n += 1 }
+            // "CNIJMediaType": the run is CNIJM; the M starts "Media".
+            if n < chars.count, n > 0, chars[n].isLowercase { n -= 1 }
+            if n >= 2 { out.insert(String(chars[..<n])) }
+        }
+        return out
+    }
+
+    /// Only the settings that belong to this printer's driver: its own
+    /// option names, its maker's prefixed settings (including ones only
+    /// the maker's dialog uses, like Canon's CNIJPDEEnable), and macOS's
+    /// color matching choice. Page ranges, copies, paper rectangles and
+    /// another maker's settings are left out.
+    static func driverSettings(_ dict: [String: Any], for p: MacPrinter) -> [String: String] {
+        let prefixes = makerPrefixes(p)
+        var out: [String: String] = [:]
+        for (key, value) in dict {
+            guard !key.hasPrefix("com.apple.") else { continue }
+            let text: String
+            if let s = value as? String { text = s }
+            else if let n = value as? NSNumber, !(value is Bool) { text = n.stringValue }
+            else { continue }
+            if p.driverDefaults[key] != nil || key.hasPrefix("AP_")
+                || prefixes.contains(where: { key.hasPrefix($0) })
+                || key == "cupsBorderlessScalingFactor" {
+                out[key] = text
+            }
+        }
+        return out
+    }
+
+    /// Whether these settings came from this printer's maker's dialog:
+    /// at least one setting with the maker's own prefix.
+    private static func hasMakerSettings(_ s: [String: String], for p: MacPrinter) -> Bool {
+        let prefixes = makerPrefixes(p)
+        return !prefixes.isEmpty && s.keys.contains { k in prefixes.contains { k.hasPrefix($0) } }
     }
 
     /// Every setting Canon's print dialog put on a Pro Luster job that
@@ -822,6 +906,8 @@ nonisolated enum MacPrinting {
         var duplex = false
         /// Debug only: the job waits on hold until cancelled.
         var hold = false
+        /// Where the driver settings came from, for the self-test log.
+        var settingsSource = ""
     }
 
     static func jobSettings(printer p: MacPrinter, pageSize: CGSize,
@@ -832,34 +918,29 @@ nonisolated enum MacPrinting {
         let paper = p.pageSizeName(for: pageSize)
         var s = JobSettings(copies: copies, pages: pages, paperName: paper,
                             duplex: duplex && p.duplex != nil)
+        // Start from what this printer maker's own print dialog sends,
+        // when this Mac has it (dialogSettings), so drivers that only
+        // trust settings shaped like their own dialog's (Canon's, Nov 16,
+        // 2026) get them; then put the print window's choices on top.
         var o: [String: String] = [:]
-        if p.driverDefaults.keys.contains(where: { $0.hasPrefix("CNIJ") }) {
-            // A Canon inkjet driver: send exactly what Canon's own print
-            // dialog sends, and change only what the person chose. Extra
-            // settings, or a quality Canon's dialog never pairs with photo
-            // paper (Super Fine), made the printer report "the paper in the
-            // printer is different from the setting requested", while the
-            // same page printed from Preview with Canon's dialog worked
-            // (Nov 16, 2026).
-            o = canonDialogSettings
-            if let media { o["CNIJMediaType"] = media }
-            let q = quality ?? "5"
-            o["CNIJPrintQuality"] = q
-            // Canon's dialog pairs Fine (5) and finer with High print mode.
+        let base = dialogSettings(for: p)
+        s.settingsSource = base?.source ?? "standard"
+        if let base {
+            o = base.settings
+        } else if let paper {
+            // No maker dialog to follow: the standard paper size option.
+            o["PageSize"] = paper
+        }
+        if p.duplex != nil || o["Duplex"] != nil { o["Duplex"] = s.duplex ? "DuplexNoTumble" : "None" }
+        if let k = p.mediaType?.keyword, let media { o[k] = media }
+        if let k = p.quality?.keyword, let quality { o[k] = quality }
+        if let k = p.paperSource?.keyword, let source { o[k] = source }
+        // Canon's dialog pairs its quality with a print mode: Fine (5) and
+        // finer with High (1), the rest with Standard (2).
+        if let q = o["CNIJPrintQuality"], o["CNIJPrintMode2"] != nil || o["CNIJPrintMode"] != nil {
             let high = (Int(q) ?? 10) <= 5
             o["CNIJPrintMode"] = high ? "1" : "2"
             o["CNIJPrintMode2"] = high ? "1" : "2"
-            o["Duplex"] = s.duplex ? "DuplexNoTumble" : "None"
-            if let source { o["CNIJMediaSupply"] = source }
-        } else {
-            // Any other driver: the paper size, the choices made in the
-            // print window, and two sided; everything else as the driver
-            // and printer have it.
-            if let paper { o["PageSize"] = paper }
-            if p.duplex != nil { o["Duplex"] = s.duplex ? "DuplexNoTumble" : "None" }
-            if let k = p.mediaType?.keyword, let media { o[k] = media }
-            if let k = p.quality?.keyword, let quality { o[k] = quality }
-            if let k = p.paperSource?.keyword, let source { o[k] = source }
         }
         s.driverOptions = o
         #if DEBUG
@@ -937,7 +1018,7 @@ nonisolated enum MacPrinting {
                                   media: luster ? "63" : preset?.media,
                                   quality: luster ? bestQuality(p.quality) : preset?.quality,
                                   duplex: false)
-            out.append("submit to \(p.id): \(job)")
+            out.append("submit to \(p.id), settings from \(job.settingsSource): \(job.driverOptions.count) driver settings")
             do {
                 try submit(file: URL(fileURLWithPath: pdf), to: p.id,
                            title: "PPG self-test", settings: job)
