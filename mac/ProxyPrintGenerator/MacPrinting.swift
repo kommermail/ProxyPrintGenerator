@@ -186,7 +186,7 @@ nonisolated enum MacPrinting {
                 mediaType: ppd?.option(matching: ["CNIJMediaType", "MediaType", "EPIJ_Medi", "HPMediaType", "BRMediaType"],
                                        labelHint: ["media type", "paper type"]),
                 quality: ppd?.option(matching: ["CNIJPrintQuality", "cupsPrintQuality", "EPIJ_Qual", "HPPrintQuality", "BRResolution", "OutputMode"],
-                                     labelHint: ["quality"]),
+                                     labelHint: ["quality"]).map(withoutCanonSuperFine),
                 pageSize: ppd?.options["PageSize"],
                 duplex: ppd?.options["Duplex"],
                 unusedMakerDriverPPD: unusedPPD)
@@ -212,6 +212,15 @@ nonisolated enum MacPrinting {
             }?.displayName
         }
         return out
+    }
+
+    /// Canon's quality list without Super Fine (0), which Canon's own
+    /// dialog doesn't pair with photo paper.
+    private static func withoutCanonSuperFine(_ o: DriverOption) -> DriverOption {
+        guard o.keyword == "CNIJPrintQuality" else { return o }
+        return DriverOption(keyword: o.keyword, label: o.label,
+                            choices: o.choices.filter { $0.value != "0" },
+                            defaultValue: o.defaultValue)
     }
 
     private static func driverKind(_ ppd: PPDFile) -> DriverKind {
@@ -425,6 +434,11 @@ nonisolated enum MacPrinting {
     /// The driver's best quality: Super Fine, Best, High, or Fine.
     static func bestQuality(_ option: DriverOption?) -> String? {
         guard let choices = option?.choices else { return nil }
+        // Canon: Fine (5) with High print mode is the best its own dialog
+        // uses for photo paper; Super Fine is left out of the list.
+        if option?.keyword == "CNIJPrintQuality", choices.contains(where: { $0.value == "5" }) {
+            return "5"
+        }
         for word in ["super fine", "highest", "best", "high", "fine"] {
             if let c = choices.first(where: {
                 $0.label.lowercased().hasPrefix(word)
@@ -433,6 +447,47 @@ nonisolated enum MacPrinting {
         }
         return nil
     }
+
+    /// Every setting Canon's print dialog put on a Pro Luster job that
+    /// printed right (Preview, MB5400, Nov 16, 2026), less the paper type,
+    /// quality and two sided, which each job sets. Canon drivers get
+    /// exactly this set, and nothing else.
+    static let canonDialogSettings: [String: String] = [
+        "AP_ColorMatchingMode": "AP_VendorColorMatching",
+        "CNIJAmountOfExtension": "10",
+        "CNIJBalanceC": "0", "CNIJBalanceM": "0", "CNIJBalanceY": "0",
+        "CNIJBanner": "5",
+        "CNIJCartridge": "1",
+        "CNIJClearFormID": "",
+        "CNIJClearInkMode": "0",
+        "CNIJColorPatternCheckBox": "0",
+        "CNIJContrast": "0",
+        "CNIJDebugLog": "0",
+        "CNIJDensity": "0",
+        "CNIJDitherPattern": "2560",
+        "CNIJGamma2": "18",
+        "CNIJGrayScale": "0",
+        "CNIJGrayScaleCheckBox": "0",
+        "CNIJHalfToneRadio": "1",
+        "CNIJIntent2": "1",
+        "CNIJMarginType": "0",
+        "CNIJMediaSupply": "46",
+        "CNIJMediaType": "0",
+        "CNIJPDEEnable": "1",
+        "CNIJPQualitySlider": "3",
+        "CNIJPZVividPosiProcess": "0",
+        "CNIJPaperGapCommand": "10",
+        "CNIJPreviewSampleType": "1",
+        "CNIJPrintMode": "1",
+        "CNIJPrintMode2": "1",
+        "CNIJPrintQuality": "5",
+        "CNIJSpecialMode": "0",
+        "CNIJStapleMargin": "0",
+        "CNIJStapleSide": "1",
+        "Duplex": "None",
+        "Resolution": "600x600dpi",
+        "cupsBorderlessScalingFactor": "1",
+    ]
 
     // MARK: - Advice about the printer
 
@@ -777,33 +832,34 @@ nonisolated enum MacPrinting {
         let paper = p.pageSizeName(for: pageSize)
         var s = JobSettings(copies: copies, pages: pages, paperName: paper,
                             duplex: duplex && p.duplex != nil)
-        // Every driver option is set explicitly, starting from the
-        // driver's own defaults, so nothing is left for a default saved
-        // on this Mac, in the driver or on the printer to fill in
-        // (Liam, Nov 16, 2026: prints kept coming out A4 plain paper).
-        var o = p.driverDefaults
-        if let paper {
-            o["PageSize"] = paper
-            if o["PageRegion"] != nil { o["PageRegion"] = paper }
-        }
-        if p.duplex != nil { o["Duplex"] = s.duplex ? "DuplexNoTumble" : "None" }
-        if let k = p.mediaType?.keyword, let media { o[k] = media }
-        if let k = p.quality?.keyword, let quality { o[k] = quality }
-        // The paper source: the one chosen in the print window, else the
-        // driver's own default (Canon: Cassette (Auto Select)), which is
-        // what Preview sends. Picking cassette 1 by itself made the job
-        // differ from Preview's working one in that one setting, and the
-        // printer reported a mismatch (Nov 16, 2026).
-        if let k = p.paperSource?.keyword, let source { o[k] = source }
-        // Canon's drivers take their own settings from a job only when
-        // it says they came from Canon's print dialog, which every job
-        // from that dialog does (CNIJPDEEnable 1, in Canon's saved
-        // settings); without it they print on their defaults, A4 plain.
-        if o.keys.contains(where: { $0.hasPrefix("CNIJ") }) {
-            o["CNIJPDEEnable"] = "1"
-            if o["CNIJPrintMode2"] != nil, let quality, quality == bestQuality(p.quality) {
-                o["CNIJPrintMode2"] = "1"   // High
-            }
+        var o: [String: String] = [:]
+        if p.driverDefaults.keys.contains(where: { $0.hasPrefix("CNIJ") }) {
+            // A Canon inkjet driver: send exactly what Canon's own print
+            // dialog sends, and change only what the person chose. Extra
+            // settings, or a quality Canon's dialog never pairs with photo
+            // paper (Super Fine), made the printer report "the paper in the
+            // printer is different from the setting requested", while the
+            // same page printed from Preview with Canon's dialog worked
+            // (Nov 16, 2026).
+            o = canonDialogSettings
+            if let media { o["CNIJMediaType"] = media }
+            let q = quality ?? "5"
+            o["CNIJPrintQuality"] = q
+            // Canon's dialog pairs Fine (5) and finer with High print mode.
+            let high = (Int(q) ?? 10) <= 5
+            o["CNIJPrintMode"] = high ? "1" : "2"
+            o["CNIJPrintMode2"] = high ? "1" : "2"
+            o["Duplex"] = s.duplex ? "DuplexNoTumble" : "None"
+            if let source { o["CNIJMediaSupply"] = source }
+        } else {
+            // Any other driver: the paper size, the choices made in the
+            // print window, and two sided; everything else as the driver
+            // and printer have it.
+            if let paper { o["PageSize"] = paper }
+            if p.duplex != nil { o["Duplex"] = s.duplex ? "DuplexNoTumble" : "None" }
+            if let k = p.mediaType?.keyword, let media { o[k] = media }
+            if let k = p.quality?.keyword, let quality { o[k] = quality }
+            if let k = p.paperSource?.keyword, let source { o[k] = source }
         }
         s.driverOptions = o
         #if DEBUG
