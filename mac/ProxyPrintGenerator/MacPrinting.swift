@@ -80,6 +80,10 @@ nonisolated struct MacPrinter: Identifiable, Hashable, Sendable {
     /// Another printer entry for this same model that already uses
     /// the maker's driver, by display name.
     var makerDriverTwin: String? = nil
+    /// Every option the driver has, with its default choice, so a job
+    /// can set each one itself instead of leaving any to a default
+    /// saved on this Mac, in the driver, or on the printer.
+    var driverDefaults: [String: String] = [:]
 
     static func == (a: MacPrinter, b: MacPrinter) -> Bool { a.id == b.id }
     func hash(into h: inout Hasher) { h.combine(id) }
@@ -143,7 +147,7 @@ nonisolated enum MacPrinting {
                 unused = match.model
                 unusedPPD = match.path
             }
-            out.append(MacPrinter(
+            var printer = MacPrinter(
                 id: name,
                 displayName: opts["printer-info"] ?? name,
                 model: model,
@@ -164,7 +168,9 @@ nonisolated enum MacPrinting {
                                      labelHint: ["quality"]),
                 pageSize: ppd?.options["PageSize"],
                 duplex: ppd?.options["Duplex"],
-                unusedMakerDriverPPD: unusedPPD))
+                unusedMakerDriverPPD: unusedPPD)
+            printer.driverDefaults = ppd?.options.compactMapValues(\.defaultValue) ?? [:]
+            out.append(printer)
         }
         // A model already set up with the maker's driver elsewhere
         // needs no setup, just choosing that printer.
@@ -736,11 +742,32 @@ nonisolated enum MacPrinting {
                             copies: Int, pages: ClosedRange<Int>?,
                             media: String?, quality: String?,
                             duplex: Bool) -> JobSettings {
-        var s = JobSettings(copies: copies, pages: pages,
-                            paperName: p.pageSizeName(for: pageSize),
+        let paper = p.pageSizeName(for: pageSize)
+        var s = JobSettings(copies: copies, pages: pages, paperName: paper,
                             duplex: duplex && p.duplex != nil)
-        if let k = p.mediaType?.keyword, let media { s.driverOptions[k] = media }
-        if let k = p.quality?.keyword, let quality { s.driverOptions[k] = quality }
+        // Every driver option is set explicitly, starting from the
+        // driver's own defaults, so nothing is left for a default saved
+        // on this Mac, in the driver or on the printer to fill in
+        // (Liam, Nov 16, 2026: prints kept coming out A4 plain paper).
+        var o = p.driverDefaults
+        if let paper {
+            o["PageSize"] = paper
+            if o["PageRegion"] != nil { o["PageRegion"] = paper }
+        }
+        if p.duplex != nil { o["Duplex"] = s.duplex ? "DuplexNoTumble" : "None" }
+        if let k = p.mediaType?.keyword, let media { o[k] = media }
+        if let k = p.quality?.keyword, let quality { o[k] = quality }
+        // Canon's drivers take their own settings from a job only when
+        // it says they came from Canon's print dialog, which every job
+        // from that dialog does (CNIJPDEEnable 1, in Canon's saved
+        // settings); without it they print on their defaults, A4 plain.
+        if o.keys.contains(where: { $0.hasPrefix("CNIJ") }) {
+            o["CNIJPDEEnable"] = "1"
+            if o["CNIJPrintMode2"] != nil, let quality, quality == bestQuality(p.quality) {
+                o["CNIJPrintMode2"] = "1"   // High
+            }
+        }
+        s.driverOptions = o
         #if DEBUG
         s.hold = ProcessInfo.processInfo.environment["PPG_PRINT_HOLD"] != nil
         #endif
