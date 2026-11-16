@@ -45,6 +45,7 @@ struct MacPrintSheet: View {
     @State private var printerID: String?
     @State private var media: String?
     @State private var quality: String?
+    @State private var source: String?
     @State private var copies = 1
     @State private var allPages = true
     @State private var fromPage = 1
@@ -184,6 +185,23 @@ struct MacPrintSheet: View {
                 }
                 if let paperHint {
                     line(paperHint, 15)
+                        .opacity(0.85)
+                        .padding(.leading, 122)
+                }
+            }
+            if let option = printer.paperSource {
+                row("Paper source") {
+                    Picker("", selection: $source) {
+                        ForEach(option.choices, id: \.value) { c in
+                            Text(Self.friendly(c.label)).tag(Optional(c.value))
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 300)
+                    .help("Which cassette the paper comes from. The app picks the one your printer says holds this paper.")
+                }
+                if let note = trayNote(printer) {
+                    line(note, 15)
                         .opacity(0.85)
                         .padding(.leading, 122)
                 }
@@ -378,19 +396,37 @@ struct MacPrintSheet: View {
     private func choosePaper(for p: MacPrinter, memory: MacPrintMemory) {
         media = p.mediaType?.defaultValue
         quality = p.quality?.defaultValue
+        source = p.paperSource?.defaultValue
         if let m = memory.media, p.mediaType?.choices.contains(where: { $0.value == m }) == true {
             media = m
         }
         if let q = memory.quality, p.quality?.choices.contains(where: { $0.value == q }) == true {
             quality = q
         }
+        if let tray = p.source(holding: media) { source = tray }
     }
 
     /// A paper picked from the list: that paper, at the driver's best
-    /// quality (the quality list can still change it).
+    /// quality (the quality list can still change it), from the cassette
+    /// the printer says holds it.
     private func pickPaper(_ value: String?, on p: MacPrinter) {
         media = value
         if let best = MacPrinting.bestQuality(p.quality) { quality = best }
+        if let tray = p.source(holding: value) { source = tray }
+    }
+
+    /// What the printer says its cassettes hold, against the chosen paper.
+    private func trayNote(_ p: MacPrinter) -> String? {
+        guard !p.trayPaper.isEmpty else { return nil }
+        func name(_ type: String) -> String {
+            Self.friendly(p.mediaType?.choices.first { $0.value == type }?.label ?? "paper type \(type)")
+        }
+        let loaded = p.trayPaper.keys.sorted().map { "cassette \($0): \(name(p.trayPaper[$0]!))" }
+            .joined(separator: ", ")
+        if let media, !p.trayPaper.values.contains(media) {
+            return "Your printer says it holds \(loaded). No cassette is set for \(name(media)), so the printer will ask: load it and set that cassette's paper on the printer."
+        }
+        return "Your printer says it holds \(loaded)."
     }
 
     private func send() {
@@ -400,7 +436,7 @@ struct MacPrintSheet: View {
         let job = MacPrinting.jobSettings(
             printer: p, pageSize: pageSize, copies: copies,
             pages: allPages ? nil : fromPage...toPage,
-            media: media, quality: quality, duplex: request.duplex)
+            media: media, quality: quality, source: source, duplex: request.duplex)
         let url = request.url, title = request.jobName, queue = p.id
         Task {
             do {

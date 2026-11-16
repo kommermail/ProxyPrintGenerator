@@ -84,6 +84,27 @@ nonisolated struct MacPrinter: Identifiable, Hashable, Sendable {
     /// can set each one itself instead of leaving any to a default
     /// saved on this Mac, in the driver, or on the printer.
     var driverDefaults: [String: String] = [:]
+    /// The driver's paper source list (Canon: Cassette (Auto Select),
+    /// Cassette 1, Cassette 2).
+    var paperSource: DriverOption? = nil
+    /// What each cassette is registered as holding, by cassette number:
+    /// the paper type value, as the printer reports it (Canon's
+    /// com.canon.ijprinter-media-info-<cassette>-<type>-<size>).
+    var trayPaper: [Int: String] = [:]
+
+    /// The paper source that holds this paper type: the cassette the
+    /// printer says is loaded with it. Nil when no cassette reports it.
+    func source(holding media: String?) -> String? {
+        guard let media, let choices = paperSource?.choices else { return nil }
+        for tray in trayPaper.keys.sorted() where trayPaper[tray] == media {
+            if let c = choices.first(where: {
+                let l = $0.label.lowercased()
+                return l.contains("cassette") && l.hasSuffix(" \(tray)")
+                    || l.contains("tray") && l.hasSuffix(" \(tray)")
+            }) { return c.value }
+        }
+        return nil
+    }
 
     static func == (a: MacPrinter, b: MacPrinter) -> Bool { a.id == b.id }
     func hash(into h: inout Hasher) { h.combine(id) }
@@ -170,6 +191,16 @@ nonisolated enum MacPrinting {
                 duplex: ppd?.options["Duplex"],
                 unusedMakerDriverPPD: unusedPPD)
             printer.driverDefaults = ppd?.options.compactMapValues(\.defaultValue) ?? [:]
+            printer.paperSource = ppd?.option(matching: ["CNIJMediaSupply", "InputSlot"],
+                                              labelHint: ["paper source", "media source"])
+            for reason in (opts["printer-state-reasons"] ?? "").split(separator: ",") {
+                let parts = reason.split(separator: "-")
+                // com.canon.ijprinter-media-info-1-63-13
+                if reason.hasPrefix("com.canon.ijprinter-media-info-"), parts.count >= 6,
+                   let tray = Int(parts[parts.count - 3]) {
+                    printer.trayPaper[tray] = String(parts[parts.count - 2])
+                }
+            }
             out.append(printer)
         }
         // A model already set up with the maker's driver elsewhere
@@ -741,6 +772,7 @@ nonisolated enum MacPrinting {
     static func jobSettings(printer p: MacPrinter, pageSize: CGSize,
                             copies: Int, pages: ClosedRange<Int>?,
                             media: String?, quality: String?,
+                            source: String? = nil,
                             duplex: Bool) -> JobSettings {
         let paper = p.pageSizeName(for: pageSize)
         var s = JobSettings(copies: copies, pages: pages, paperName: paper,
@@ -757,6 +789,14 @@ nonisolated enum MacPrinting {
         if p.duplex != nil { o["Duplex"] = s.duplex ? "DuplexNoTumble" : "None" }
         if let k = p.mediaType?.keyword, let media { o[k] = media }
         if let k = p.quality?.keyword, let quality { o[k] = quality }
+        // The paper source: the one chosen, else the cassette the printer
+        // says holds this paper, never Auto Select by default. (Canon's
+        // MB5400 has a plain-paper-only cassette 2; on Auto, a Pro Luster
+        // job was matched against it: "the paper in the printer is
+        // different from the setting requested".)
+        if let k = p.paperSource?.keyword, let chosen = source ?? p.source(holding: media) {
+            o[k] = chosen
+        }
         // Canon's drivers take their own settings from a job only when
         // it says they came from Canon's print dialog, which every job
         // from that dialog does (CNIJPDEEnable 1, in Canon's saved
