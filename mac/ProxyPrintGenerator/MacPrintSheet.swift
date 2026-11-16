@@ -399,6 +399,10 @@ struct MacPrintSheet: View {
         source = p.paperSource?.defaultValue
         if let m = memory.media, p.mediaType?.choices.contains(where: { $0.value == m }) == true {
             media = m
+            // A remembered paper prints at its best quality unless a
+            // quality this printer still offers was remembered with it
+            // (Super Fine, once remembered, is no longer in Canon's list).
+            quality = MacPrinting.bestQuality(p.quality) ?? quality
         }
         if let q = memory.quality, p.quality?.choices.contains(where: { $0.value == q }) == true {
             quality = q
